@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\CateringPackage;
 use App\Models\DrinkPrice;
 use App\Models\Item;
 use App\Models\PlatePrice;
@@ -73,6 +74,18 @@ class DatabaseSeeder extends Seeder
                 'store_id' => null,
                 'price' => $drink['price'],
                 'effective_from' => now()->toDateString(),
+                'is_active' => true,
+            ]);
+        }
+
+        foreach ([
+            ['name' => 'Standard', 'price_per_plate' => 34000],
+            ['name' => 'Premium', 'price_per_plate' => 38000],
+            ['name' => 'Deluxe', 'price_per_plate' => 45000],
+        ] as $package) {
+            CateringPackage::create([
+                'name' => $package['name'],
+                'price_per_plate' => $package['price_per_plate'],
                 'is_active' => true,
             ]);
         }

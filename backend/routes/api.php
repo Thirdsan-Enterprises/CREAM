@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\CateringOrderController;
+use App\Http\Controllers\CateringPackageController;
 use App\Http\Controllers\DrinkController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\PlatePriceController;
@@ -51,6 +53,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/plate-price', [PlatePriceController::class, 'update']);
         Route::post('/drinks', [DrinkController::class, 'store']);
         Route::patch('/drinks/{item}', [DrinkController::class, 'update']);
+
+        Route::get('/catering-packages', [CateringPackageController::class, 'index']);
+        Route::post('/catering-packages', [CateringPackageController::class, 'store']);
+        Route::patch('/catering-packages/{cateringPackage}', [CateringPackageController::class, 'update']);
+
+        Route::get('/catering-orders', [CateringOrderController::class, 'index']);
+        Route::post('/catering-orders', [CateringOrderController::class, 'store']);
+        Route::get('/catering-orders/{cateringOrder}', [CateringOrderController::class, 'show']);
+        Route::patch('/catering-orders/{cateringOrder}', [CateringOrderController::class, 'update']);
+        Route::post('/catering-orders/{cateringOrder}/payments', [CateringOrderController::class, 'addPayment']);
     });
 
     Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STOREKEEPER.','.User::ROLE_STORE_MANAGER)->group(function () {
