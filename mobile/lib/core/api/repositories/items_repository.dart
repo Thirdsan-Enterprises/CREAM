@@ -33,6 +33,36 @@ class ItemsRepository {
         .map((e) => Item.fromJson(e as Map<String, dynamic>))
         .toList();
   }
+
+  Future<Item> createItem({
+    required String name,
+    required String unit,
+    bool isDrink = false,
+  }) async {
+    final body = await _api.post(
+      '/items',
+      data: {'name': name, 'unit': unit, 'is_drink': isDrink},
+    );
+    return Item.fromJson(body);
+  }
+
+  Future<void> setStoreSettings({
+    required int itemId,
+    required int storeId,
+    required double safetyStock,
+  }) {
+    return _api.post(
+      '/items/$itemId/store-settings',
+      data: {'store_id': storeId, 'safety_stock': safetyStock},
+    );
+  }
+
+  Future<void> updatePlatePrice({required double price, int? storeId}) {
+    return _api.patch(
+      '/plate-price',
+      data: {'price': price, if (storeId != null) 'store_id': storeId},
+    );
+  }
 }
 
 final itemsRepositoryProvider = Provider<ItemsRepository>(

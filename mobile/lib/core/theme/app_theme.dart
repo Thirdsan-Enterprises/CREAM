@@ -46,9 +46,13 @@ class AppTheme {
     final colorScheme = const ColorScheme.dark().copyWith(
       primary: AppColors.gold,
       onPrimary: AppColors.charcoal,
+      primaryContainer: AppColors.gold,
+      onPrimaryContainer: AppColors.charcoal,
       secondary: AppColors.goldLight,
       secondaryContainer: AppColors.gold,
       onSecondaryContainer: AppColors.charcoal,
+      tertiaryContainer: AppColors.gold,
+      onTertiaryContainer: AppColors.charcoal,
       surface: AppColors.charcoal,
       onSurface: AppColors.cream,
     );
@@ -93,6 +97,10 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: AppColors.gold,
+        foregroundColor: AppColors.charcoal,
+      ),
     );
   }
 
@@ -102,9 +110,13 @@ class AppTheme {
     final colorScheme = const ColorScheme.light().copyWith(
       primary: AppColors.gold,
       onPrimary: AppColors.charcoal,
+      primaryContainer: AppColors.charcoal,
+      onPrimaryContainer: AppColors.cream,
       secondary: AppColors.charcoal,
       secondaryContainer: AppColors.creamDark,
       onSecondaryContainer: AppColors.charcoal,
+      tertiaryContainer: AppColors.creamDark,
+      onTertiaryContainer: AppColors.charcoal,
       surface: AppColors.cream,
       onSurface: AppColors.charcoal,
     );
@@ -150,6 +162,10 @@ class AppTheme {
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(color: AppColors.creamDark),
         ),
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: AppColors.charcoal,
+        foregroundColor: AppColors.cream,
       ),
     );
   }
