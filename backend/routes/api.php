@@ -1,7 +1,10 @@
 <?php
 
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\DrinkController;
 use App\Http\Controllers\ItemController;
+use App\Http\Controllers\PlatePriceController;
+use App\Http\Controllers\SaleController;
 use App\Http\Controllers\StockMovementController;
 use App\Http\Controllers\StockTransferController;
 use App\Http\Controllers\StoreController;
@@ -23,6 +26,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/transfers', [StockTransferController::class, 'index']);
     Route::get('/transfers/{transfer}', [StockTransferController::class, 'show']);
 
+    Route::get('/plate-price', [PlatePriceController::class, 'show']);
+    Route::get('/drinks', [DrinkController::class, 'index']);
+
+    Route::get('/sales', [SaleController::class, 'index']);
+    Route::get('/sales/summary', [SaleController::class, 'summary']);
+
+    Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STORE_MANAGER.','.User::ROLE_CASHIER)->group(function () {
+        Route::post('/sales', [SaleController::class, 'store']);
+    });
+
     Route::middleware('role:'.User::ROLE_ADMIN)->group(function () {
         Route::post('/stores', [StoreController::class, 'store']);
         Route::patch('/stores/{store}', [StoreController::class, 'update']);
@@ -34,6 +47,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/items', [ItemController::class, 'store']);
         Route::patch('/items/{item}', [ItemController::class, 'update']);
         Route::post('/items/{item}/store-settings', [ItemController::class, 'setStoreSettings']);
+
+        Route::patch('/plate-price', [PlatePriceController::class, 'update']);
+        Route::post('/drinks', [DrinkController::class, 'store']);
+        Route::patch('/drinks/{item}', [DrinkController::class, 'update']);
     });
 
     Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STOREKEEPER.','.User::ROLE_STORE_MANAGER)->group(function () {

@@ -2,6 +2,9 @@
 
 namespace Database\Seeders;
 
+use App\Models\DrinkPrice;
+use App\Models\Item;
+use App\Models\PlatePrice;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -44,5 +47,34 @@ class DatabaseSeeder extends Seeder
             'role' => User::ROLE_ADMIN,
             'store_id' => null,
         ]);
+
+        PlatePrice::create([
+            'store_id' => null,
+            'price' => 25000,
+            'effective_from' => now()->toDateString(),
+            'is_active' => true,
+        ]);
+
+        // Prices/costs below are placeholders (TBC) pending final figures from the client.
+        foreach ([
+            ['name' => 'Soda', 'price' => 3000],
+            ['name' => 'Water', 'price' => 2000],
+            ['name' => 'Juice', 'price' => 4000],
+        ] as $drink) {
+            $item = Item::create([
+                'name' => $drink['name'].' (TBC)',
+                'unit' => 'bottle',
+                'is_drink' => true,
+                'is_active' => true,
+            ]);
+
+            DrinkPrice::create([
+                'item_id' => $item->id,
+                'store_id' => null,
+                'price' => $drink['price'],
+                'effective_from' => now()->toDateString(),
+                'is_active' => true,
+            ]);
+        }
     }
 }
