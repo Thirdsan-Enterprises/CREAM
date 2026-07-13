@@ -123,7 +123,8 @@ class ReportController extends Controller
     {
         return CateringOrder::query()
             ->with('package')
-            ->whereBetween('event_date', [now()->toDateString(), now()->addDays($days)->toDateString()])
+            ->whereDate('event_date', '>=', now()->toDateString())
+            ->whereDate('event_date', '<=', now()->addDays($days)->toDateString())
             ->whereNotIn('status', [CateringOrder::STATUS_SETTLED, CateringOrder::STATUS_CANCELLED])
             ->orderBy('event_date')
             ->get()

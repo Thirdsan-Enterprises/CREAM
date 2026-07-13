@@ -26,11 +26,11 @@ class CateringOrderController extends Controller
         }
 
         if ($request->filled('from')) {
-            $query->where('event_date', '>=', $request->date('from'));
+            $query->whereDate('event_date', '>=', $request->date('from'));
         }
 
         if ($request->filled('to')) {
-            $query->where('event_date', '<=', $request->date('to'));
+            $query->whereDate('event_date', '<=', $request->date('to'));
         }
 
         return $query->paginate();
