@@ -7,6 +7,7 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DrinkController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\PlatePriceController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\StockMovementController;
 use App\Http\Controllers\StockTransferController;
@@ -71,6 +72,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/catering-orders/{cateringOrder}', [CateringOrderController::class, 'show']);
         Route::patch('/catering-orders/{cateringOrder}', [CateringOrderController::class, 'update']);
         Route::post('/catering-orders/{cateringOrder}/payments', [CateringOrderController::class, 'addPayment']);
+
+        Route::get('/reports/dashboard', [ReportController::class, 'dashboard']);
+        Route::get('/reports/stock-status', [ReportController::class, 'stockStatus']);
+        Route::get('/reports/outstanding-credit', [ReportController::class, 'outstandingCredit']);
+        Route::get('/reports/catering-pipeline', [ReportController::class, 'cateringPipeline']);
     });
 
     Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STOREKEEPER.','.User::ROLE_STORE_MANAGER)->group(function () {
