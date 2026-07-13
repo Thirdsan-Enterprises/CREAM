@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\CateringOrderController;
 use App\Http\Controllers\CateringPackageController;
+use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DrinkController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\PlatePriceController;
@@ -36,6 +37,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STORE_MANAGER.','.User::ROLE_CASHIER)->group(function () {
         Route::post('/sales', [SaleController::class, 'store']);
+
+        Route::get('/customers', [CustomerController::class, 'index']);
+        Route::post('/customers', [CustomerController::class, 'store']);
+        Route::get('/customers/{customer}', [CustomerController::class, 'show']);
+        Route::get('/customers/{customer}/statement', [CustomerController::class, 'statement']);
+        Route::get('/customers/{customer}/balance', [CustomerController::class, 'balance']);
+        Route::post('/customers/{customer}/deposit', [CustomerController::class, 'deposit']);
     });
 
     Route::middleware('role:'.User::ROLE_ADMIN)->group(function () {
