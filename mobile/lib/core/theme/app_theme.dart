@@ -47,6 +47,8 @@ class AppTheme {
       primary: AppColors.gold,
       onPrimary: AppColors.charcoal,
       secondary: AppColors.goldLight,
+      secondaryContainer: AppColors.gold,
+      onSecondaryContainer: AppColors.charcoal,
       surface: AppColors.charcoal,
       onSurface: AppColors.cream,
     );
@@ -101,6 +103,8 @@ class AppTheme {
       primary: AppColors.gold,
       onPrimary: AppColors.charcoal,
       secondary: AppColors.charcoal,
+      secondaryContainer: AppColors.creamDark,
+      onSecondaryContainer: AppColors.charcoal,
       surface: AppColors.cream,
       onSurface: AppColors.charcoal,
     );

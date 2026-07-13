@@ -62,6 +62,26 @@ class StockBalanceTest extends TestCase
         $response->assertStatus(422);
     }
 
+    public function test_store_manager_can_view_their_own_store_stock_status(): void
+    {
+        $store = Store::factory()->create();
+        $item = Item::factory()->create();
+        ItemStoreSetting::create(['item_id' => $item->id, 'store_id' => $store->id, 'safety_stock' => 10]);
+        $manager = User::factory()->create(['role' => User::ROLE_STORE_MANAGER, 'store_id' => $store->id]);
+
+        StockMovement::create([
+            'item_id' => $item->id, 'store_id' => $store->id, 'type' => StockMovement::TYPE_PURCHASE,
+            'qty' => 5, 'user_id' => $manager->id, 'occurred_at' => now(),
+        ]);
+
+        $response = $this->actingAs($manager)->getJson('/api/stock/status');
+
+        $response->assertOk();
+        $this->assertEquals($store->id, $response->json('store_id'));
+        $itemRow = collect($response->json('items'))->firstWhere('item_id', $item->id);
+        $this->assertEquals('Re-Order', $itemRow['status']);
+    }
+
     public function test_cashier_supplied_store_id_is_overridden_by_their_own_store(): void
     {
         $ownStore = Store::factory()->create();

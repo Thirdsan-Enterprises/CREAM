@@ -134,4 +134,22 @@ class SaleTest extends TestCase
         $this->assertEquals(3000, $response->json('drink_revenue'));
         $this->assertEquals(53000, $response->json('total_revenue'));
     }
+
+    public function test_sales_summary_to_date_filter_includes_the_whole_day(): void
+    {
+        $this->seedPlatePrice();
+        $store = Store::factory()->create();
+        $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
+
+        $this->actingAs($cashier)->postJson('/api/sales', [
+            'payment_method' => 'cash',
+            'lines' => [['item_type' => 'plate', 'qty' => 1]],
+        ])->assertCreated();
+
+        $today = now()->toDateString();
+        $response = $this->actingAs($cashier)->getJson("/api/sales/summary?from={$today}&to={$today}");
+
+        $response->assertOk();
+        $this->assertEquals(25000, $response->json('total_revenue'));
+    }
 }
