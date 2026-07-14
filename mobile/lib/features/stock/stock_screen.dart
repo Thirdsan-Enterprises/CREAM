@@ -55,6 +55,69 @@ class _BalancesTabState extends ConsumerState<_BalancesTab> {
     setState(() => _future = ref.read(stockRepositoryProvider).status());
   }
 
+  Future<void> _recordPurchase(StoreItemStatus item) async {
+    final qtyController = TextEditingController();
+    final noteController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Buy stock — ${item.itemName}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: qtyController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Quantity bought'),
+              autofocus: true,
+            ),
+            TextField(
+              controller: noteController,
+              decoration: const InputDecoration(labelText: 'Note (optional)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final qty = double.tryParse(qtyController.text);
+    if (qty == null || qty <= 0) return;
+
+    try {
+      await ref
+          .read(stockRepositoryProvider)
+          .purchase(
+            itemId: item.itemId,
+            qty: qty,
+            note: noteController.text.isEmpty ? null : noteController.text,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Purchase recorded.')));
+      _reload();
+    } catch (e) {
+      if (!mounted) return;
+      final message = e is ApiException ? e.message : 'Something went wrong.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   Future<void> _logConsumption(StoreItemStatus item) async {
     final qtyController = TextEditingController();
     final noteController = TextEditingController();
@@ -150,15 +213,26 @@ class _BalancesTabState extends ConsumerState<_BalancesTab> {
                   subtitle: Text(
                     'Balance: ${item.balance.toStringAsFixed(0)} (safety: ${item.safetyStock.toStringAsFixed(0)})',
                   ),
-                  trailing: Chip(
-                    label: Text(item.status),
-                    backgroundColor: item.needsReorder
-                        ? AppColors.danger
-                        : AppColors.gold,
-                    labelStyle: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (item.isDrink)
+                        IconButton(
+                          icon: const Icon(Icons.add_shopping_cart),
+                          tooltip: 'Buy stock',
+                          onPressed: () => _recordPurchase(item),
+                        ),
+                      Chip(
+                        label: Text(item.status),
+                        backgroundColor: item.needsReorder
+                            ? AppColors.danger
+                            : AppColors.gold,
+                        labelStyle: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                   onTap: () => _logConsumption(item),
                 ),

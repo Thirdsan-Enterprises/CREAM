@@ -62,6 +62,21 @@ class StockBalanceTest extends TestCase
         $response->assertStatus(422);
     }
 
+    public function test_drinks_can_be_purchased_directly_at_a_non_main_store(): void
+    {
+        $lugogo = Store::factory()->create(['is_main' => false]);
+        $drink = Item::factory()->create(['is_drink' => true]);
+        $user = User::factory()->create(['role' => User::ROLE_STORE_MANAGER, 'store_id' => $lugogo->id]);
+
+        $response = $this->actingAs($user)->postJson('/api/stock/purchase', [
+            'item_id' => $drink->id,
+            'qty' => 24,
+        ]);
+
+        $response->assertCreated();
+        $this->assertEquals(24, StockMovement::query()->where('item_id', $drink->id)->where('store_id', $lugogo->id)->sum('qty'));
+    }
+
     public function test_store_manager_can_view_their_own_store_stock_status(): void
     {
         $store = Store::factory()->create();

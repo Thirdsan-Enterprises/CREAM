@@ -55,6 +55,7 @@ class StockService
             return [
                 'item_id' => $setting->item_id,
                 'item_name' => $setting->item->name,
+                'is_drink' => (bool) $setting->item->is_drink,
                 'balance' => $balance,
                 'safety_stock' => (float) $setting->safety_stock,
                 'status' => $balance <= (float) $setting->safety_stock ? 'Re-Order' : 'Stock Sufficient',

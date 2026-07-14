@@ -47,7 +47,7 @@ class StockRepository {
 
   Future<void> purchase({
     required int itemId,
-    required int storeId,
+    int? storeId,
     required double qty,
     String? note,
   }) {
@@ -55,7 +55,7 @@ class StockRepository {
       '/stock/purchase',
       data: {
         'item_id': itemId,
-        'store_id': storeId,
+        if (storeId != null) 'store_id': storeId,
         'qty': qty,
         if (note != null) 'note': note,
       },
@@ -126,6 +126,7 @@ class StoreItemStatus {
   StoreItemStatus({
     required this.itemId,
     required this.itemName,
+    required this.isDrink,
     required this.balance,
     required this.safetyStock,
     required this.status,
@@ -135,6 +136,7 @@ class StoreItemStatus {
       StoreItemStatus(
         itemId: json['item_id'] as int,
         itemName: json['item_name'] as String,
+        isDrink: json['is_drink'] as bool? ?? false,
         balance: (json['balance'] as num).toDouble(),
         safetyStock: (json['safety_stock'] as num).toDouble(),
         status: json['status'] as String,
@@ -142,6 +144,7 @@ class StoreItemStatus {
 
   final int itemId;
   final String itemName;
+  final bool isDrink;
   final double balance;
   final double safetyStock;
   final String status;

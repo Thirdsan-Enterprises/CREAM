@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\CateringPackage;
 use App\Models\DrinkPrice;
 use App\Models\Item;
+use App\Models\ItemStoreSetting;
 use App\Models\PlatePrice;
 use App\Models\Store;
 use App\Models\User;
@@ -27,19 +28,21 @@ class DatabaseSeeder extends Seeder
             'is_active' => true,
         ]);
 
-        Store::create([
+        $lugogo = Store::create([
             'name' => 'Lugogo',
             'code' => 'LUGOGO',
             'is_main' => false,
             'is_active' => true,
         ]);
 
-        Store::create([
+        $town = Store::create([
             'name' => 'Town',
             'code' => 'TOWN',
             'is_main' => false,
             'is_active' => true,
         ]);
+
+        $stores = [$kira, $lugogo, $town];
 
         User::factory()->create([
             'name' => 'Admin',
@@ -56,14 +59,17 @@ class DatabaseSeeder extends Seeder
             'is_active' => true,
         ]);
 
-        // Prices/costs below are placeholders (TBC) pending final figures from the client.
+        // Each store stocks and sells its own drinks (bought locally, not transferred from Kira).
         foreach ([
-            ['name' => 'Soda', 'price' => 3000],
+            ['name' => 'Passion Juice', 'price' => 5000],
+            ['name' => 'Mocktail', 'price' => 5000],
+            ['name' => 'Bushera', 'price' => 5000],
+            ['name' => 'Soda', 'price' => 2000],
             ['name' => 'Water', 'price' => 2000],
-            ['name' => 'Juice', 'price' => 4000],
+            ['name' => 'Eshande', 'price' => 5000],
         ] as $drink) {
             $item = Item::create([
-                'name' => $drink['name'].' (TBC)',
+                'name' => $drink['name'],
                 'unit' => 'bottle',
                 'is_drink' => true,
                 'is_active' => true,
@@ -76,6 +82,14 @@ class DatabaseSeeder extends Seeder
                 'effective_from' => now()->toDateString(),
                 'is_active' => true,
             ]);
+
+            foreach ($stores as $store) {
+                ItemStoreSetting::create([
+                    'item_id' => $item->id,
+                    'store_id' => $store->id,
+                    'safety_stock' => 10,
+                ]);
+            }
         }
 
         foreach ([

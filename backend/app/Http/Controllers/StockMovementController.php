@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Item;
 use App\Models\StockMovement;
 use App\Models\Store;
 use App\Services\StockService;
@@ -69,8 +70,9 @@ class StockMovementController extends Controller
         $storeId = StoreScope::resolveRequired($user, $data['store_id'] ?? null);
         StoreScope::assertAccess($user, $storeId);
 
+        $item = Item::findOrFail($data['item_id']);
         $store = Store::findOrFail($storeId);
-        if (! $store->is_main) {
+        if (! $store->is_main && ! $item->is_drink) {
             throw ValidationException::withMessages([
                 'store_id' => ['Purchases (Stock In) can only be recorded at the main store.'],
             ]);
