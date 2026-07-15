@@ -42,7 +42,7 @@ class SaleController extends Controller
         }
 
         if ($request->filled('to')) {
-            $query->where('sold_at', '<=', $request->date('to'));
+            $query->where('sold_at', '<=', $request->date('to')->endOfDay());
         }
 
         return $query->paginate();
@@ -158,7 +158,7 @@ class SaleController extends Controller
         }
 
         if ($request->filled('to')) {
-            $query->where('sold_at', '<=', $request->date('to'));
+            $query->where('sold_at', '<=', $request->date('to')->endOfDay());
         }
 
         $sales = $query->get();
@@ -188,7 +188,7 @@ class SaleController extends Controller
             'plate_revenue' => $plateRevenue,
             'drink_revenue' => $drinkRevenue,
             'plates_sold' => $plateCount,
-            'by_payment_method' => $byPaymentMethod,
+            'by_payment_method' => (object) $byPaymentMethod,
         ]);
     }
 }

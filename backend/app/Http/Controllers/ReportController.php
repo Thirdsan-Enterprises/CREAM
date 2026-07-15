@@ -4,15 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Models\CateringOrder;
 use App\Models\Customer;
-use App\Models\ItemStoreSetting;
 use App\Models\Sale;
 use App\Models\SaleItem;
-use App\Models\StockMovement;
 use App\Models\Store;
+use App\Services\StockService;
 use Illuminate\Http\Request;
 
 class ReportController extends Controller
 {
+    public function __construct(private readonly StockService $stockService) {}
+
     public function dashboard()
     {
         $todaySales = Sale::query()->whereDate('sold_at', now()->toDateString())->with('items')->get();
@@ -29,7 +30,7 @@ class ReportController extends Controller
         return response()->json([
             'sales_total_today' => $todaySales->sum('total'),
             'plates_sold_today' => (float) $platesSoldToday,
-            'sales_by_store_today' => $salesByStore,
+            'sales_by_store_today' => (object) $salesByStore->all(),
             'low_stock_alerts' => $this->lowStockAlerts(),
             'upcoming_catering' => $this->upcomingCateringOrders(7),
             'total_outstanding_credit' => $this->totalOutstandingCredit(),
@@ -44,7 +45,7 @@ class ReportController extends Controller
             $stores->map(fn (Store $store) => [
                 'store_id' => $store->id,
                 'store_name' => $store->name,
-                'items' => $this->storeItemStatuses($store->id),
+                'items' => $this->stockService->storeItemStatuses($store->id),
             ])->values()
         );
     }
@@ -108,7 +109,7 @@ class ReportController extends Controller
         $alerts = [];
 
         foreach (Store::query()->where('is_active', true)->get() as $store) {
-            foreach ($this->storeItemStatuses($store->id) as $row) {
+            foreach ($this->stockService->storeItemStatuses($store->id) as $row) {
                 if ($row['status'] === 'Re-Order') {
                     $alerts[] = [...$row, 'store_id' => $store->id, 'store_name' => $store->name];
                 }
@@ -118,34 +119,12 @@ class ReportController extends Controller
         return $alerts;
     }
 
-    private function storeItemStatuses(int $storeId): array
-    {
-        $settings = ItemStoreSetting::query()->where('store_id', $storeId)->with('item')->get();
-
-        $balances = StockMovement::query()
-            ->where('store_id', $storeId)
-            ->selectRaw('item_id, SUM(qty) as balance')
-            ->groupBy('item_id')
-            ->pluck('balance', 'item_id');
-
-        return $settings->map(function ($setting) use ($balances) {
-            $balance = (float) ($balances[$setting->item_id] ?? 0);
-
-            return [
-                'item_id' => $setting->item_id,
-                'item_name' => $setting->item->name,
-                'balance' => $balance,
-                'safety_stock' => (float) $setting->safety_stock,
-                'status' => $balance <= (float) $setting->safety_stock ? 'Re-Order' : 'Stock Sufficient',
-            ];
-        })->values()->all();
-    }
-
     private function upcomingCateringOrders(int $days): array
     {
         return CateringOrder::query()
             ->with('package')
-            ->whereBetween('event_date', [now()->toDateString(), now()->addDays($days)->toDateString()])
+            ->whereDate('event_date', '>=', now()->toDateString())
+            ->whereDate('event_date', '<=', now()->addDays($days)->toDateString())
             ->whereNotIn('status', [CateringOrder::STATUS_SETTLED, CateringOrder::STATUS_CANCELLED])
             ->orderBy('event_date')
             ->get()

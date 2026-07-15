@@ -27,6 +27,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/items/{item}/balances', [ItemController::class, 'balances']);
 
     Route::get('/stock/movements', [StockMovementController::class, 'index']);
+    Route::get('/stock/status', [StockMovementController::class, 'status']);
     Route::get('/transfers', [StockTransferController::class, 'index']);
     Route::get('/transfers/{transfer}', [StockTransferController::class, 'show']);
 

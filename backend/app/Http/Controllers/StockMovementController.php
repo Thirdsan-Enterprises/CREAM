@@ -2,14 +2,29 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Item;
 use App\Models\StockMovement;
 use App\Models\Store;
+use App\Services\StockService;
 use App\Support\StoreScope;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 class StockMovementController extends Controller
 {
+    public function __construct(private readonly StockService $stockService) {}
+
+    public function status(Request $request)
+    {
+        $storeId = StoreScope::resolveRequired($request->user(), $request->integer('store_id') ?: null);
+        StoreScope::assertAccess($request->user(), $storeId);
+
+        return response()->json([
+            'store_id' => $storeId,
+            'items' => $this->stockService->storeItemStatuses($storeId),
+        ]);
+    }
+
     public function index(Request $request)
     {
         $user = $request->user();
@@ -34,7 +49,7 @@ class StockMovementController extends Controller
         }
 
         if ($request->filled('to')) {
-            $query->where('occurred_at', '<=', $request->date('to'));
+            $query->where('occurred_at', '<=', $request->date('to')->endOfDay());
         }
 
         return $query->paginate();
@@ -55,8 +70,9 @@ class StockMovementController extends Controller
         $storeId = StoreScope::resolveRequired($user, $data['store_id'] ?? null);
         StoreScope::assertAccess($user, $storeId);
 
+        $item = Item::findOrFail($data['item_id']);
         $store = Store::findOrFail($storeId);
-        if (! $store->is_main) {
+        if (! $store->is_main && ! $item->is_drink) {
             throw ValidationException::withMessages([
                 'store_id' => ['Purchases (Stock In) can only be recorded at the main store.'],
             ]);

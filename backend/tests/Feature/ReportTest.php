@@ -63,6 +63,22 @@ class ReportTest extends TestCase
         $this->assertTrue($lowStock->contains(fn ($row) => $row['item_id'] === $item->id));
     }
 
+    public function test_dashboard_upcoming_catering_includes_event_exactly_on_the_boundary_day(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN, 'store_id' => null]);
+        $package = CateringPackage::factory()->create();
+        CateringOrder::factory()->create([
+            'catering_package_id' => $package->id,
+            'event_date' => now()->addDays(7)->toDateString(),
+            'created_by' => $admin->id,
+        ]);
+
+        $response = $this->actingAs($admin)->getJson('/api/reports/dashboard');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('upcoming_catering'));
+    }
+
     public function test_stock_status_reports_sufficient_and_reorder_per_store(): void
     {
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN, 'store_id' => null]);

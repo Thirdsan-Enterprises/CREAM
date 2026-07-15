@@ -15,11 +15,12 @@ This is a **bespoke build**, not a generic POS template. Every feature below is 
 
 ## 1. Business Model Cream Runs (read this before building anything)
 
-- **Kira is the main store.** All purchasing ("Stock In") happens at Kira only.
+- **Kira is the main store.** All purchasing ("Stock In") of food/non-drink stock happens at Kira only.
 - Stock is **transferred** from Kira to Lugogo and Town as needed. A transfer has a dispatch step (from Kira) and a confirmation step (at the receiving outlet) — this catches shortages/losses in transit.
+- **Drinks are the exception to the Kira-only rule**: each store stocks and buys its own drinks locally (not transferred from Kira) — Stock In for a drink item is allowed directly at any active store, not just Kira.
 - Each outlet consumes its own stock daily ("Stock Out") and has its own running **Stock Balance**.
 - Each item has a **safety stock** threshold per store. When balance falls at/below it, status = "Re-Order"; otherwise "Stock Sufficient" — mirrors the client's existing Excel tracker exactly, just automated.
-- **Daily plate sales**: every outlet sells a standard plate at a fixed price (default **UGX 25,000**, must be editable by Admin, never hardcoded). A **drink is optional and priced separately** (client is confirming exact drink prices and stocking cost — treat drinks as their own priced, stocked items, not bundled into the plate price). A single sale can include a plate plus zero or more drinks, each drink tracked and priced individually (e.g. soda vs water vs juice may differ in price and cost).
+- **Daily plate sales**: every outlet sells a standard plate at a fixed price (default **UGX 25,000**, must be editable by Admin, never hardcoded). A **drink is optional and priced separately** — treat drinks as their own priced, stocked items, not bundled into the plate price. Confirmed drink lineup and prices: Passion Juice UGX 5,000, Mocktail UGX 5,000, Bushera UGX 5,000, Eshande UGX 5,000, Soda UGX 2,000, Water UGX 2,000. A single sale can include a plate plus zero or more drinks, each drink tracked and priced individually.
 - **Outside catering** is a completely separate revenue stream from daily plate sales — must never mix in reports. Catering has tiered per-plate packages (default UGX 34,000 / 38,000 / 45,000 — configurable, not hardcoded) for events like weddings, graduations, conferences, baby showers, get-togethers. Catering is order/event-based: quote → confirm → deliver → settle, with deposits tracked against a total.
 - **Customer accounts**: two account types sharing one ledger mechanism —
   - **Prepaid**: customer deposits money, balance goes up; every meal deducts from balance. Balance cannot go below zero.
@@ -285,9 +286,9 @@ Store Manager gets a reduced version of the above scoped to their own store (no 
 - PDF export of reports (start with in-app views / CSV, add PDF later if needed)
 
 **Pending from client (do not seed as final — placeholders only until confirmed):**
-- Exact drink prices per type (soda / water / juice / other) — client is sending these
-- Exact stocking cost details for drinks and possibly other items — client is sending these
-- Seed `drink_prices` and `items` (drinks) with placeholder values clearly marked TBC, so the schema and screens can be built and tested now without blocking on final numbers
+- Drink sale prices are confirmed and seeded: Passion Juice UGX 5,000, Mocktail UGX 5,000, Bushera UGX 5,000, Eshande UGX 5,000, Soda UGX 2,000, Water UGX 2,000.
+- Exact stocking cost (COGS) for drinks and possibly other items is still pending — client is sending these.
+- Per-store safety stock thresholds for drinks are seeded at a placeholder value (10) pending client confirmation of real reorder levels.
 
 ---
 
