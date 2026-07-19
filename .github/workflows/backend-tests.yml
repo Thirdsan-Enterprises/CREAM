@@ -1,16 +1,21 @@
-name: Tests
+name: Backend Tests
 
 on:
   push:
     branches:
-      - master
-      - '*.x'
+      - main
+    paths:
+      - 'backend/**'
   pull_request:
-  schedule:
-    - cron: '0 0 * * *'
+    paths:
+      - 'backend/**'
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    working-directory: backend
 
 jobs:
   tests:
@@ -19,7 +24,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        php: [8.3, 8.4, 8.5]
+        php: [8.3, 8.4]
 
     name: PHP ${{ matrix.php }}
 
