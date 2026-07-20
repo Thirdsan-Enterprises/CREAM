@@ -63,7 +63,9 @@ jobs:
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
       - name: Build release APK (per-ABI, smaller than a fat debug build)
-        run: flutter build apk --release --split-per-abi
+        run: |
+          flutter build apk --release --split-per-abi \
+            --dart-define=API_BASE_URL=https://cream.thirdsan.com/api
 
       - name: Upload release APK artifact
         uses: actions/upload-artifact@v4
