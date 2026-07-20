@@ -1,0 +1,4 @@
+storePassword=
+keyPassword=
+keyAlias=cream_pos
+storeFile=cream-release.keystore
