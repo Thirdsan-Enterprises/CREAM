@@ -36,7 +36,9 @@ android {
     signingConfigs {
         if (keystorePropertiesFile.exists()) {
             create("release") {
-                storeFile = file(keystoreProperties["storeFile"] as String)
+                // keystoreProperties["storeFile"] is relative to android/ (where key.properties
+                // lives), not this module's directory (android/app/) — resolve against rootProject.
+                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
                 storePassword = keystoreProperties["storePassword"] as String
                 keyAlias = keystoreProperties["keyAlias"] as String
                 keyPassword = keystoreProperties["keyPassword"] as String
