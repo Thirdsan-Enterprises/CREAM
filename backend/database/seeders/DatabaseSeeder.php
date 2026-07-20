@@ -11,6 +11,7 @@ use App\Models\Store;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -44,12 +45,17 @@ class DatabaseSeeder extends Seeder
 
         $stores = [$kira, $lugogo, $town];
 
-        User::factory()->create([
+        // Created directly (not via factory()) because factories always evaluate
+        // fake() in definition(), and fakerphp/faker is a require-dev package
+        // that isn't installed in the production image (composer install --no-dev).
+        User::create([
             'name' => 'Admin',
             'phone' => '0700000000',
             'email' => 'admin@cream.co.ug',
+            'password' => 'password',
             'role' => User::ROLE_ADMIN,
             'store_id' => null,
+            'is_active' => true,
         ]);
 
         PlatePrice::create([
