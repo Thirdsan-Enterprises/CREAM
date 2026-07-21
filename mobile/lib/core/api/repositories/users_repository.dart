@@ -65,10 +65,27 @@ class UsersRepository {
     return ManagedUser.fromJson(body);
   }
 
-  Future<ManagedUser> update(int userId, {bool? isActive}) async {
+  Future<ManagedUser> update(
+    int userId, {
+    String? name,
+    String? phone,
+    String? password,
+    String? role,
+    int? storeId,
+    bool? isActive,
+  }) async {
     final body = await _api.patch(
       '/users/$userId',
-      data: {if (isActive != null) 'is_active': isActive},
+      data: {
+        if (name != null) 'name': name,
+        if (phone != null) 'phone': phone,
+        if (password != null && password.isNotEmpty) 'password': password,
+        if (role != null) 'role': role,
+        // Explicit key (not `if != null`) so clearing a store — e.g.
+        // switching a user's role to admin — can send store_id: null.
+        if (role != null) 'store_id': storeId,
+        if (isActive != null) 'is_active': isActive,
+      },
     );
     return ManagedUser.fromJson(body);
   }
