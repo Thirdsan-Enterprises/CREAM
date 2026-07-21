@@ -3,9 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/api/repositories/customers_repository.dart';
+import '../../core/theme/app_colors.dart';
 import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/formatters/date_formatter.dart';
 import '../../shared/models/customer.dart';
+
+const _accountTypeFilters = <String?>[null, 'prepaid', 'credit'];
+const _accountTypeLabels = {
+  null: 'All',
+  'prepaid': 'Prepaid',
+  'credit': 'Credit',
+};
 
 class AccountsScreen extends ConsumerStatefulWidget {
   const AccountsScreen({super.key});
@@ -17,16 +25,33 @@ class AccountsScreen extends ConsumerStatefulWidget {
 class _AccountsScreenState extends ConsumerState<AccountsScreen> {
   final _controller = TextEditingController();
   List<Customer> _results = [];
-  bool _searching = false;
+  bool _searching = true;
+  String? _accountTypeFilter;
+
+  @override
+  void initState() {
+    super.initState();
+    // Load everyone up front so the list is browsable, not just searchable —
+    // a cashier should be able to see "who's already in the system" at a
+    // glance, not have to know a name or phone number first.
+    _search('');
+  }
 
   Future<void> _search(String query) async {
     setState(() => _searching = true);
     try {
-      final results = await ref.read(customersRepositoryProvider).search(query);
+      final results = await ref
+          .read(customersRepositoryProvider)
+          .search(query, accountType: _accountTypeFilter);
       if (mounted) setState(() => _results = results);
     } finally {
       if (mounted) setState(() => _searching = false);
     }
+  }
+
+  void _setFilter(String? accountType) {
+    setState(() => _accountTypeFilter = accountType);
+    _search(_controller.text);
   }
 
   @override
@@ -35,12 +60,13 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
     super.dispose();
   }
 
-  void _openCustomer(Customer customer) {
-    showModalBottomSheet(
+  Future<void> _openCustomer(Customer customer) async {
+    final changed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       builder: (context) => _CustomerDetailSheet(customer: customer),
     );
+    if (changed == true) _search(_controller.text);
   }
 
   @override
@@ -59,26 +85,78 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
               onChanged: _search,
             ),
             const SizedBox(height: 12),
-            if (_searching) const CircularProgressIndicator(),
+            Row(
+              children: [
+                for (final type in _accountTypeFilters)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(_accountTypeLabels[type]!),
+                      selected: _accountTypeFilter == type,
+                      onSelected: (_) => _setFilter(type),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_searching) const Expanded(child: Center(child: CircularProgressIndicator())),
             if (!_searching)
               Expanded(
-                child: ListView.builder(
-                  itemCount: _results.length,
-                  itemBuilder: (context, index) {
-                    final customer = _results[index];
-                    return Card(
-                      child: ListTile(
-                        title: Text(customer.name),
-                        subtitle: Text(customer.phone),
-                        trailing: Text(
-                          customer.isCredit ? 'Credit' : 'Prepaid',
+                child: _results.isEmpty
+                    ? const Center(child: Text('No customers found.'))
+                    : ListView.builder(
+                        itemCount: _results.length,
+                        itemBuilder: (context, index) => _CustomerTile(
+                          customer: _results[index],
+                          onTap: () => _openCustomer(_results[index]),
                         ),
-                        onTap: () => _openCustomer(customer),
                       ),
-                    );
-                  },
-                ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One row: name/phone, account-type badge, and balance — red for a
+/// customer who owes (credit account in the negative), otherwise neutral.
+class _CustomerTile extends StatelessWidget {
+  const _CustomerTile({required this.customer, required this.onTap});
+
+  final Customer customer;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final balance = customer.balance;
+    final owesMoney = customer.isCredit && (balance ?? 0) < 0;
+
+    return Card(
+      child: ListTile(
+        title: Text(customer.name),
+        subtitle: Text(customer.phone),
+        onTap: onTap,
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Chip(
+              label: Text(customer.isCredit ? 'Credit' : 'Prepaid'),
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              balance == null
+                  ? '—'
+                  : CurrencyFormatter.format(balance),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: owesMoney ? AppColors.danger : null,
+              ),
+            ),
           ],
         ),
       ),
@@ -101,6 +179,7 @@ class _CustomerDetailSheetState extends ConsumerState<_CustomerDetailSheet> {
   _future;
   final _depositController = TextEditingController();
   bool _depositing = false;
+  bool _changed = false;
 
   @override
   void initState() {
@@ -111,6 +190,7 @@ class _CustomerDetailSheetState extends ConsumerState<_CustomerDetailSheet> {
   }
 
   void _reload() {
+    _changed = true;
     setState(
       () => _future = ref
           .read(customersRepositoryProvider)
@@ -169,11 +249,24 @@ class _CustomerDetailSheetState extends ConsumerState<_CustomerDetailSheet> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    data.customer.name,
-                    style: Theme.of(context).textTheme.headlineSmall,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          data.customer.name,
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(_changed),
+                      ),
+                    ],
                   ),
-                  Text(data.customer.phone),
+                  Text(
+                    '${data.customer.phone} — ${data.customer.isCredit ? 'Credit (limit ${CurrencyFormatter.format(data.customer.creditLimit)})' : 'Prepaid'}',
+                  ),
                   const SizedBox(height: 12),
                   Text(
                     'Balance',
@@ -216,20 +309,24 @@ class _CustomerDetailSheetState extends ConsumerState<_CustomerDetailSheet> {
                     style: Theme.of(context).textTheme.labelLarge,
                   ),
                   Expanded(
-                    child: ListView.builder(
-                      controller: scrollController,
-                      itemCount: data.entries.length,
-                      itemBuilder: (context, index) {
-                        final entry = data.entries[index];
-                        return ListTile(
-                          dense: true,
-                          title: Text(CurrencyFormatter.format(entry.amount)),
-                          subtitle: Text(
-                            '${entry.type} — ${DateFormatter.dateTime(entry.occurredAt)}',
+                    child: data.entries.isEmpty
+                        ? const Center(child: Text('No activity yet.'))
+                        : ListView.builder(
+                            controller: scrollController,
+                            itemCount: data.entries.length,
+                            itemBuilder: (context, index) {
+                              final entry = data.entries[index];
+                              return ListTile(
+                                dense: true,
+                                title: Text(
+                                  CurrencyFormatter.format(entry.amount),
+                                ),
+                                subtitle: Text(
+                                  '${entry.type} — ${DateFormatter.dateTime(entry.occurredAt)}',
+                                ),
+                              );
+                            },
                           ),
-                        );
-                      },
-                    ),
                   ),
                 ],
               );
@@ -240,3 +337,4 @@ class _CustomerDetailSheetState extends ConsumerState<_CustomerDetailSheet> {
     );
   }
 }
+

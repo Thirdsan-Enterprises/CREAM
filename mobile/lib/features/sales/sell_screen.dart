@@ -125,21 +125,28 @@ class _SellScreenState extends ConsumerState<SellScreen> {
     return total;
   }
 
-  Future<void> _addDrink() async {
-    final drink = await showModalBottomSheet<Drink>(
-      context: context,
-      builder: (context) => _DrinkPicker(drinks: _availableDrinks),
-    );
-    if (drink == null) return;
+  _DrinkLine? _lineFor(Drink drink) =>
+      _drinkLines.where((l) => l.drink.item.id == drink.item.id).firstOrNull;
 
+  void _incrementDrink(Drink drink) {
     setState(() {
-      final existing = _drinkLines
-          .where((l) => l.drink.item.id == drink.item.id)
-          .firstOrNull;
+      final existing = _lineFor(drink);
       if (existing != null) {
         existing.qty++;
       } else {
         _drinkLines.add(_DrinkLine(drink, 1));
+      }
+    });
+  }
+
+  void _decrementDrink(Drink drink) {
+    setState(() {
+      final existing = _lineFor(drink);
+      if (existing == null) return;
+      if (existing.qty > 1) {
+        existing.qty--;
+      } else {
+        _drinkLines.remove(existing);
       }
     });
   }
@@ -307,44 +314,37 @@ class _SellScreenState extends ConsumerState<SellScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Drinks', style: Theme.of(context).textTheme.titleLarge),
-              TextButton.icon(
-                onPressed: _addDrink,
-                icon: const Icon(Icons.add),
-                label: const Text('Add drink'),
-              ),
-            ],
+          Text('Drinks', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 4),
+          Text(
+            'Tap to add, tap again for more.',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
-          for (final line in _drinkLines)
-            Card(
-              margin: const EdgeInsets.only(top: 8),
-              child: ListTile(
-                title: Text(line.drink.item.name),
-                subtitle: Text(CurrencyFormatter.format(line.drink.price ?? 0)),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      onPressed: () => setState(() {
-                        if (line.qty > 1) {
-                          line.qty--;
-                        } else {
-                          _drinkLines.remove(line);
-                        }
-                      }),
-                      icon: const Icon(Icons.remove_circle_outline),
-                    ),
-                    Text('${line.qty}'),
-                    IconButton(
-                      onPressed: () => setState(() => line.qty++),
-                      icon: const Icon(Icons.add_circle_outline),
-                    ),
-                  ],
-                ),
-              ),
+          const SizedBox(height: 12),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _availableDrinks.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 0.95,
+            ),
+            itemBuilder: (context, index) {
+              final drink = _availableDrinks[index];
+              return _DrinkTile(
+                drink: drink,
+                qty: _lineFor(drink)?.qty ?? 0,
+                onAdd: () => _incrementDrink(drink),
+                onRemove: () => _decrementDrink(drink),
+              );
+            },
+          ),
+          if (_availableDrinks.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text('No drinks available.'),
             ),
           const SizedBox(height: 24),
           Text('Payment method', style: Theme.of(context).textTheme.titleLarge),
@@ -432,29 +432,81 @@ class _SellScreenState extends ConsumerState<SellScreen> {
   }
 }
 
-class _DrinkPicker extends StatelessWidget {
-  const _DrinkPicker({required this.drinks});
+/// A single tappable drink tile — the modern-POS grid pattern (Square,
+/// Toast, Clover): tap to add one, a badge shows the current quantity,
+/// a small remove control appears once it's in the cart.
+class _DrinkTile extends StatelessWidget {
+  const _DrinkTile({
+    required this.drink,
+    required this.qty,
+    required this.onAdd,
+    required this.onRemove,
+  });
 
-  final List<Drink> drinks;
+  final Drink drink;
+  final int qty;
+  final VoidCallback onAdd;
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: ListView(
-        shrinkWrap: true,
-        children: [
-          for (final drink in drinks)
-            ListTile(
-              title: Text(drink.item.name),
-              trailing: Text(CurrencyFormatter.format(drink.price ?? 0)),
-              onTap: () => Navigator.of(context).pop(drink),
+    final selected = qty > 0;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: selected
+          ? colorScheme.primaryContainer
+          : colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onAdd,
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.local_drink_outlined, size: 28),
+                  const SizedBox(height: 8),
+                  Text(
+                    drink.item.name,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    CurrencyFormatter.format(drink.price ?? 0),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
-          if (drinks.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text('No drinks available.'),
-            ),
-        ],
+            if (selected)
+              Positioned(
+                top: 4,
+                right: 4,
+                child: GestureDetector(
+                  onTap: onRemove,
+                  child: CircleAvatar(
+                    radius: 12,
+                    backgroundColor: colorScheme.primary,
+                    child: Text(
+                      '$qty',
+                      style: TextStyle(
+                        color: colorScheme.onPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
