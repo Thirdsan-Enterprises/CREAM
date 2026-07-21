@@ -17,6 +17,49 @@ class _DrinkLine {
   int qty;
 }
 
+/// Shows what a customer can spend right now, and flags in-line if the
+/// current cart would exceed it — so a cashier finds out before tapping
+/// "Complete sale," not after it gets rejected.
+class _CustomerAvailabilityNotice extends StatelessWidget {
+  const _CustomerAvailabilityNotice({
+    required this.available,
+    required this.total,
+  });
+
+  final double? available;
+  final double total;
+
+  @override
+  Widget build(BuildContext context) {
+    if (available == null) {
+      return const Text('Could not load balance — will be checked on submit.');
+    }
+
+    final exceeds = total > available!;
+    return Row(
+      children: [
+        Icon(
+          exceeds ? Icons.error_outline : Icons.check_circle_outline,
+          size: 18,
+          color: exceeds ? AppColors.danger : AppColors.success,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            exceeds
+                ? 'Only ${CurrencyFormatter.format(available!)} available — over by ${CurrencyFormatter.format(total - available!)}.'
+                : 'Available: ${CurrencyFormatter.format(available!)}',
+            style: TextStyle(
+              color: exceeds ? AppColors.danger : null,
+              fontWeight: exceeds ? FontWeight.bold : null,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 const _paymentMethods = ['cash', 'momo', 'airtel', 'account'];
 const _paymentLabels = {
   'cash': 'Cash',
@@ -42,6 +85,8 @@ class _SellScreenState extends ConsumerState<SellScreen> {
   final List<_DrinkLine> _drinkLines = [];
   String _paymentMethod = 'cash';
   Customer? _selectedCustomer;
+  double? _selectedCustomerBalance;
+  bool _loadingCustomerBalance = false;
   bool _submitting = false;
 
   @override
@@ -105,7 +150,45 @@ class _SellScreenState extends ConsumerState<SellScreen> {
       isScrollControlled: true,
       builder: (context) => const _CustomerSearchSheet(),
     );
-    if (customer != null) setState(() => _selectedCustomer = customer);
+    if (customer == null) return;
+
+    setState(() {
+      _selectedCustomer = customer;
+      _selectedCustomerBalance = null;
+      _loadingCustomerBalance = true;
+    });
+
+    try {
+      final balance = await ref
+          .read(customersRepositoryProvider)
+          .balance(customer.id);
+      if (!mounted || _selectedCustomer?.id != customer.id) return;
+      setState(() => _selectedCustomerBalance = balance);
+    } catch (_) {
+      // Balance is a convenience preview only — the server re-checks it
+      // authoritatively on submit, so a fetch failure here isn't fatal.
+    } finally {
+      if (mounted) setState(() => _loadingCustomerBalance = false);
+    }
+  }
+
+  /// How much more this customer can spend right now: for prepaid, that's
+  /// just their balance; for credit, it's balance plus whatever headroom
+  /// is left under their credit limit.
+  double? get _selectedCustomerAvailable {
+    final balance = _selectedCustomerBalance;
+    final customer = _selectedCustomer;
+    if (balance == null || customer == null) return null;
+    return customer.isCredit ? balance + customer.creditLimit : balance;
+  }
+
+  /// Client-side preview only — the server re-checks this authoritatively
+  /// (and atomically, alongside stock/pricing) when the sale is submitted.
+  bool get _wouldExceedAccountBalance {
+    if (_paymentMethod != 'account') return false;
+    final available = _selectedCustomerAvailable;
+    if (available == null) return false;
+    return _total > available;
   }
 
   Future<void> _submit() async {
@@ -151,6 +234,7 @@ class _SellScreenState extends ConsumerState<SellScreen> {
         _drinkLines.clear();
         _paymentMethod = 'cash';
         _selectedCustomer = null;
+        _selectedCustomerBalance = null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -279,14 +363,39 @@ class _SellScreenState extends ConsumerState<SellScreen> {
           if (_paymentMethod == 'account') ...[
             const SizedBox(height: 12),
             Card(
-              child: ListTile(
-                leading: const Icon(Icons.person_search),
-                title: Text(_selectedCustomer?.name ?? 'Select customer'),
-                subtitle: _selectedCustomer != null
-                    ? Text(_selectedCustomer!.phone)
-                    : null,
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _pickCustomer,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.person_search),
+                    title: Text(_selectedCustomer?.name ?? 'Select customer'),
+                    subtitle: _selectedCustomer != null
+                        ? Text(
+                            '${_selectedCustomer!.phone} — ${_selectedCustomer!.isCredit ? 'Credit' : 'Prepaid'}',
+                          )
+                        : null,
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _pickCustomer,
+                  ),
+                  if (_selectedCustomer != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: _loadingCustomerBalance
+                          ? const Align(
+                              alignment: Alignment.centerLeft,
+                              child: SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            )
+                          : _CustomerAvailabilityNotice(
+                              available: _selectedCustomerAvailable,
+                              total: _total,
+                            ),
+                    ),
+                ],
               ),
             ),
           ],
@@ -305,7 +414,9 @@ class _SellScreenState extends ConsumerState<SellScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: (_submitting || _total <= 0) ? null : _submit,
+              onPressed: (_submitting || _total <= 0 || _wouldExceedAccountBalance)
+                  ? null
+                  : _submit,
               child: _submitting
                   ? const SizedBox(
                       height: 20,
