@@ -41,6 +41,29 @@ class CustomerTest extends TestCase
         $this->assertEquals('Alice Wanjiru', $response->json('data.0.name'));
     }
 
+    public function test_index_includes_balance_and_can_filter_by_account_type(): void
+    {
+        $store = Store::factory()->create();
+        $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
+        $prepaid = Customer::factory()->create(['name' => 'Prepaid Pat', 'account_type' => Customer::TYPE_PREPAID]);
+        $credit = Customer::factory()->credit(50000)->create(['name' => 'Credit Chris']);
+
+        $this->actingAs($cashier)->postJson("/api/customers/{$prepaid->id}/deposit", [
+            'amount' => 40000,
+        ])->assertCreated();
+
+        $response = $this->actingAs($cashier)->getJson('/api/customers');
+        $response->assertOk();
+        $byName = collect($response->json('data'))->keyBy('name');
+        $this->assertEquals(40000, $byName['Prepaid Pat']['balance']);
+        $this->assertEquals(0, $byName['Credit Chris']['balance']);
+
+        $creditOnly = $this->actingAs($cashier)->getJson('/api/customers?account_type=credit');
+        $creditOnly->assertOk();
+        $this->assertCount(1, $creditOnly->json('data'));
+        $this->assertEquals('Credit Chris', $creditOnly->json('data.0.name'));
+    }
+
     public function test_deposit_increases_prepaid_balance_and_appears_in_statement(): void
     {
         $store = Store::factory()->create();

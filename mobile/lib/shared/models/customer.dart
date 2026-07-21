@@ -5,6 +5,7 @@ class Customer {
     required this.phone,
     required this.accountType,
     required this.creditLimit,
+    this.balance,
   });
 
   factory Customer.fromJson(Map<String, dynamic> json) => Customer(
@@ -13,6 +14,11 @@ class Customer {
     phone: json['phone'] as String,
     accountType: json['account_type'] as String,
     creditLimit: double.parse(json['credit_limit'].toString()),
+    // Only present on list responses (GET /customers), which eager-load it
+    // in one query; null here just means "not fetched", not "zero".
+    balance: json['balance'] == null
+        ? null
+        : double.parse(json['balance'].toString()),
   );
 
   final int id;
@@ -20,6 +26,7 @@ class Customer {
   final String phone;
   final String accountType; // 'prepaid' or 'credit'
   final double creditLimit;
+  final double? balance;
 
   bool get isCredit => accountType == 'credit';
 }

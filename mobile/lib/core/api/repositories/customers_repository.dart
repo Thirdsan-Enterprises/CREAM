@@ -9,10 +9,16 @@ class CustomersRepository {
 
   final ApiClient _api;
 
-  Future<List<Customer>> search(String query) async {
+  /// [accountType] filters to 'prepaid' or 'credit'; omit (or pass null)
+  /// for everyone. An empty [query] returns the full customer list rather
+  /// than nothing — used to browse all accounts, not just search results.
+  Future<List<Customer>> search(String query, {String? accountType}) async {
     final body = await _api.get(
       '/customers',
-      query: query.isEmpty ? null : {'search': query},
+      query: {
+        if (query.isNotEmpty) 'search': query,
+        if (accountType != null) 'account_type': accountType,
+      },
     );
     return (body['data'] as List<dynamic>)
         .map((e) => Customer.fromJson(e as Map<String, dynamic>))

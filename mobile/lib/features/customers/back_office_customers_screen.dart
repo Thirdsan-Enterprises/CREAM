@@ -3,9 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/api/repositories/customers_repository.dart';
+import '../../core/theme/app_colors.dart';
 import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/formatters/date_formatter.dart';
 import '../../shared/models/customer.dart';
+
+const _accountTypeFilters = <String?>[null, 'prepaid', 'credit'];
+const _accountTypeLabels = {
+  null: 'All',
+  'prepaid': 'Prepaid',
+  'credit': 'Credit',
+};
 
 class BackOfficeCustomersScreen extends ConsumerStatefulWidget {
   const BackOfficeCustomersScreen({super.key});
@@ -19,7 +27,8 @@ class _BackOfficeCustomersScreenState
     extends ConsumerState<BackOfficeCustomersScreen> {
   final _controller = TextEditingController();
   List<Customer> _results = [];
-  bool _searching = false;
+  bool _searching = true;
+  String? _accountTypeFilter;
 
   @override
   void initState() {
@@ -30,11 +39,18 @@ class _BackOfficeCustomersScreenState
   Future<void> _search(String query) async {
     setState(() => _searching = true);
     try {
-      final results = await ref.read(customersRepositoryProvider).search(query);
+      final results = await ref
+          .read(customersRepositoryProvider)
+          .search(query, accountType: _accountTypeFilter);
       if (mounted) setState(() => _results = results);
     } finally {
       if (mounted) setState(() => _searching = false);
     }
+  }
+
+  void _setFilter(String? accountType) {
+    setState(() => _accountTypeFilter = accountType);
+    _search(_controller.text);
   }
 
   @override
@@ -44,11 +60,12 @@ class _BackOfficeCustomersScreenState
   }
 
   Future<void> _openCustomer(Customer customer) async {
-    await showModalBottomSheet(
+    final changed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       builder: (context) => _CustomerDetailSheet(customer: customer),
     );
+    if (changed == true) _search(_controller.text);
   }
 
   Future<void> _createCustomer() async {
@@ -76,21 +93,46 @@ class _BackOfficeCustomersScreenState
               onChanged: _search,
             ),
             const SizedBox(height: 12),
-            if (_searching) const CircularProgressIndicator(),
+            Row(
+              children: [
+                for (final type in _accountTypeFilters)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(_accountTypeLabels[type]!),
+                      selected: _accountTypeFilter == type,
+                      onSelected: (_) => _setFilter(type),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_searching)
+              const Expanded(child: Center(child: CircularProgressIndicator())),
             if (!_searching)
               Expanded(
-                child: ListView.builder(
+                child: _results.isEmpty
+                    ? const Center(child: Text('No customers found.'))
+                    : ListView.builder(
                   itemCount: _results.length,
                   itemBuilder: (context, index) {
                     final customer = _results[index];
+                    final balance = customer.balance;
+                    final owesMoney = customer.isCredit && (balance ?? 0) < 0;
                     return Card(
                       child: ListTile(
                         title: Text(customer.name),
-                        subtitle: Text(customer.phone),
+                        subtitle: Text(
+                          '${customer.phone} — ${customer.isCredit ? 'Credit (limit ${CurrencyFormatter.format(customer.creditLimit)})' : 'Prepaid'}',
+                        ),
                         trailing: Text(
-                          customer.isCredit
-                              ? 'Credit (limit ${CurrencyFormatter.format(customer.creditLimit)})'
-                              : 'Prepaid',
+                          balance == null
+                              ? '—'
+                              : CurrencyFormatter.format(balance),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: owesMoney ? AppColors.danger : null,
+                          ),
                         ),
                         onTap: () => _openCustomer(customer),
                       ),

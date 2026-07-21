@@ -13,7 +13,10 @@ class CustomerController extends Controller
 
     public function index(Request $request)
     {
-        $query = Customer::query()->orderBy('name');
+        // withSum(... as balance) computes each customer's ledger balance in
+        // the same query (one extra subquery total, not N+1) so the list can
+        // show it directly without a follow-up call per customer.
+        $query = Customer::query()->withSum('ledgerEntries as balance', 'amount')->orderBy('name');
 
         if ($request->filled('search')) {
             $search = $request->string('search');
@@ -21,6 +24,10 @@ class CustomerController extends Controller
                 $q->where('name', 'like', "%{$search}%")
                     ->orWhere('phone', 'like', "%{$search}%");
             });
+        }
+
+        if ($request->filled('account_type')) {
+            $query->where('account_type', $request->string('account_type'));
         }
 
         return $query->paginate();
