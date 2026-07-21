@@ -108,6 +108,68 @@ class SaleTest extends TestCase
         $this->assertEquals(-25000, $customer->fresh()->balance());
     }
 
+    public function test_prepaid_customer_can_deposit_upfront_and_draw_down_across_multiple_days(): void
+    {
+        // Mirrors the client's real "office lunch tab" scenario: someone pays
+        // upfront for a batch of plates, then a variable number of people eat
+        // against that balance day to day until it runs out.
+        $this->seedPlatePrice();
+        $store = Store::factory()->create();
+        $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
+        $customer = Customer::factory()->create(['account_type' => Customer::TYPE_PREPAID]);
+
+        // Deposit enough for 50 plates at 25,000 each.
+        $this->actingAs($cashier)->postJson("/api/customers/{$customer->id}/deposit", [
+            'amount' => 50 * 25000,
+        ])->assertCreated();
+        $this->assertEquals(1_250_000, $customer->fresh()->balance());
+
+        // Day 1: 3 people eat.
+        $this->actingAs($cashier)->postJson('/api/sales', [
+            'payment_method' => 'account',
+            'customer_id' => $customer->id,
+            'lines' => [['item_type' => 'plate', 'qty' => 3]],
+        ])->assertCreated();
+        $this->assertEquals(1_175_000, $customer->fresh()->balance());
+
+        // Day 2: 7 people eat.
+        $this->actingAs($cashier)->postJson('/api/sales', [
+            'payment_method' => 'account',
+            'customer_id' => $customer->id,
+            'lines' => [['item_type' => 'plate', 'qty' => 7]],
+        ])->assertCreated();
+        $this->assertEquals(1_000_000, $customer->fresh()->balance());
+
+        // Drain the rest of the balance (40 more plates = 1,000,000).
+        $this->actingAs($cashier)->postJson('/api/sales', [
+            'payment_method' => 'account',
+            'customer_id' => $customer->id,
+            'lines' => [['item_type' => 'plate', 'qty' => 40]],
+        ])->assertCreated();
+        $this->assertEquals(0, $customer->fresh()->balance());
+
+        // The 51st plate has no balance behind it and must be rejected —
+        // and rejected atomically, so no partial sale/ledger row is left behind.
+        $this->actingAs($cashier)->postJson('/api/sales', [
+            'payment_method' => 'account',
+            'customer_id' => $customer->id,
+            'lines' => [['item_type' => 'plate', 'qty' => 1]],
+        ])->assertStatus(422);
+        $this->assertEquals(0, $customer->fresh()->balance());
+        $this->assertEquals(3, $customer->fresh()->ledgerEntries()->where('type', 'sale_debit')->count());
+
+        // Topping up resumes eating against the account exactly as before.
+        $this->actingAs($cashier)->postJson("/api/customers/{$customer->id}/deposit", [
+            'amount' => 5 * 25000,
+        ])->assertCreated();
+        $this->actingAs($cashier)->postJson('/api/sales', [
+            'payment_method' => 'account',
+            'customer_id' => $customer->id,
+            'lines' => [['item_type' => 'plate', 'qty' => 1]],
+        ])->assertCreated();
+        $this->assertEquals(100000, $customer->fresh()->balance());
+    }
+
     public function test_sales_summary_breaks_out_plate_and_drink_revenue(): void
     {
         $this->seedPlatePrice();
