@@ -9,6 +9,83 @@ import '../../core/auth/store.dart';
 import '../../shared/formatters/date_formatter.dart';
 import '../../shared/models/item.dart';
 
+/// Sentinel shown as the first dropdown entry so an item that isn't in the
+/// list yet can be created without leaving the Stocking screen (Settings >
+/// Items still exists for full item management, but forcing a context
+/// switch just to record a purchase of something new is exactly the "we
+/// can't stock or add [an item to the] list" friction being fixed here).
+final _addNewItemSentinel = Item(
+  id: -1,
+  name: '+ Add new item…',
+  unit: '',
+  category: null,
+  isDrink: false,
+  isActive: true,
+);
+
+/// Prompts for a name/unit and creates the item via the API. Returns the
+/// created item, or null if the user cancelled or left a field blank.
+Future<Item?> _promptCreateItem(BuildContext context, WidgetRef ref) async {
+  final nameController = TextEditingController();
+  final unitController = TextEditingController(text: 'kg');
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Add new item'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: nameController,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Item name'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: unitController,
+            decoration: const InputDecoration(
+              labelText: 'Unit (kg, litre, piece, bottle...)',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Add item'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed != true ||
+      nameController.text.trim().isEmpty ||
+      unitController.text.trim().isEmpty) {
+    return null;
+  }
+
+  try {
+    return await ref
+        .read(itemsRepositoryProvider)
+        .createItem(
+          name: nameController.text.trim(),
+          unit: unitController.text.trim(),
+        );
+  } catch (e) {
+    if (!context.mounted) return null;
+    final message = e is ApiException ? e.message : 'Could not add item.';
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+    return null;
+  }
+}
+
 class StockingScreen extends StatelessWidget {
   const StockingScreen({super.key});
 
@@ -47,7 +124,9 @@ class _PurchaseTab extends ConsumerStatefulWidget {
 }
 
 class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
-  late Future<(List<Item>, Store)> _future;
+  late Future<void> _future;
+  List<Item> _items = [];
+  Store? _mainStore;
   Item? _selectedItem;
   final _qtyController = TextEditingController();
   final _noteController = TextEditingController();
@@ -59,11 +138,24 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
     _future = _load();
   }
 
-  Future<(List<Item>, Store)> _load() async {
+  Future<void> _load() async {
     final items = await ref.read(itemsRepositoryProvider).items();
     final stores = await ref.read(storesRepositoryProvider).all();
     final main = stores.firstWhere((s) => s.isMain);
-    return (items, main);
+    if (!mounted) return;
+    setState(() {
+      _items = items;
+      _mainStore = main;
+    });
+  }
+
+  Future<void> _addNewItem() async {
+    final created = await _promptCreateItem(context, ref);
+    if (created == null) return;
+    setState(() {
+      _items = [..._items, created];
+      _selectedItem = created;
+    });
   }
 
   Future<void> _submit(Store mainStore) async {
@@ -110,14 +202,15 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<(List<Item>, Store)>(
+    return FutureBuilder<void>(
       future: _future,
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+        if (snapshot.connectionState != ConnectionState.done ||
+            _mainStore == null) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final (items, mainStore) = snapshot.data!;
+        final mainStore = _mainStore!;
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -133,10 +226,20 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
                 initialValue: _selectedItem,
                 decoration: const InputDecoration(labelText: 'Item'),
                 items: [
-                  for (final item in items)
+                  DropdownMenuItem(
+                    value: _addNewItemSentinel,
+                    child: Text(_addNewItemSentinel.name),
+                  ),
+                  for (final item in _items)
                     DropdownMenuItem(value: item, child: Text(item.name)),
                 ],
-                onChanged: (value) => setState(() => _selectedItem = value),
+                onChanged: (value) {
+                  if (value?.id == _addNewItemSentinel.id) {
+                    _addNewItem();
+                    return;
+                  }
+                  setState(() => _selectedItem = value);
+                },
               ),
               const SizedBox(height: 12),
               TextField(
@@ -183,7 +286,9 @@ class _TransferTab extends ConsumerStatefulWidget {
 }
 
 class _TransferTabState extends ConsumerState<_TransferTab> {
-  late Future<(List<Item>, List<Store>)> _future;
+  late Future<void> _future;
+  List<Item> _items = [];
+  List<Store> _outlets = [];
   Store? _toStore;
   final List<_TransferLine> _lines = [_TransferLine()];
   bool _submitting = false;
@@ -194,10 +299,23 @@ class _TransferTabState extends ConsumerState<_TransferTab> {
     _future = _load();
   }
 
-  Future<(List<Item>, List<Store>)> _load() async {
+  Future<void> _load() async {
     final items = await ref.read(itemsRepositoryProvider).items();
     final stores = await ref.read(storesRepositoryProvider).all();
-    return (items, stores.where((s) => !s.isMain).toList());
+    if (!mounted) return;
+    setState(() {
+      _items = items;
+      _outlets = stores.where((s) => !s.isMain).toList();
+    });
+  }
+
+  Future<void> _addNewItem(_TransferLine line) async {
+    final created = await _promptCreateItem(context, ref);
+    if (created == null) return;
+    setState(() {
+      _items = [..._items, created];
+      line.item = created;
+    });
   }
 
   Future<void> _submit() async {
@@ -238,14 +356,12 @@ class _TransferTabState extends ConsumerState<_TransferTab> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<(List<Item>, List<Store>)>(
+    return FutureBuilder<void>(
       future: _future,
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+        if (snapshot.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
         }
-
-        final (items, outlets) = snapshot.data!;
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -261,7 +377,7 @@ class _TransferTabState extends ConsumerState<_TransferTab> {
                 initialValue: _toStore,
                 decoration: const InputDecoration(labelText: 'To store'),
                 items: [
-                  for (final store in outlets)
+                  for (final store in _outlets)
                     DropdownMenuItem(value: store, child: Text(store.name)),
                 ],
                 onChanged: (value) => setState(() => _toStore = value),
@@ -278,14 +394,23 @@ class _TransferTabState extends ConsumerState<_TransferTab> {
                           initialValue: line.item,
                           decoration: const InputDecoration(labelText: 'Item'),
                           items: [
-                            for (final item in items)
+                            DropdownMenuItem(
+                              value: _addNewItemSentinel,
+                              child: Text(_addNewItemSentinel.name),
+                            ),
+                            for (final item in _items)
                               DropdownMenuItem(
                                 value: item,
                                 child: Text(item.name),
                               ),
                           ],
-                          onChanged: (value) =>
-                              setState(() => line.item = value),
+                          onChanged: (value) {
+                            if (value?.id == _addNewItemSentinel.id) {
+                              _addNewItem(line);
+                              return;
+                            }
+                            setState(() => line.item = value);
+                          },
                         ),
                       ),
                       const SizedBox(width: 8),
