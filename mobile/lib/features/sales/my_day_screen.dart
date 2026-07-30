@@ -10,6 +10,7 @@ const _paymentLabels = {
   'momo': 'MoMo',
   'airtel': 'Airtel',
   'account': 'Account',
+  'lpo': 'LPO',
 };
 
 class MyDayScreen extends ConsumerStatefulWidget {

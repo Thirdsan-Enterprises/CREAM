@@ -52,26 +52,57 @@ class CateringOrder {
     required this.eventName,
     required this.eventDate,
     required this.package,
+    required this.pricePerPlate,
     required this.numberOfPlates,
+    required this.notes,
     required this.totalAmount,
     required this.status,
     required this.payments,
+    required this.depositedTotal,
+    required this.balanceDue,
+    required this.cancellationFee,
+    required this.refundableAmount,
   });
 
-  factory CateringOrder.fromJson(Map<String, dynamic> json) => CateringOrder(
-    id: json['id'] as int,
-    clientName: json['client_name'] as String,
-    clientPhone: json['client_phone'] as String,
-    eventName: json['event_name'] as String?,
-    eventDate: DateTime.parse(json['event_date'] as String),
-    package: CateringPackage.fromJson(json['package'] as Map<String, dynamic>),
-    numberOfPlates: json['number_of_plates'] as int,
-    totalAmount: double.parse(json['total_amount'].toString()),
-    status: json['status'] as String,
-    payments: ((json['payments'] as List<dynamic>?) ?? [])
+  factory CateringOrder.fromJson(Map<String, dynamic> json) {
+    final totalAmount = double.parse(json['total_amount'].toString());
+    final payments = ((json['payments'] as List<dynamic>?) ?? [])
         .map((e) => CateringPayment.fromJson(e as Map<String, dynamic>))
-        .toList(),
-  );
+        .toList();
+    // deposited_total/balance_due/cancellation_fee/refundable_amount are
+    // computed server-side (the source of truth); fall back to a local
+    // computation only if an older/partial response shape lacks them.
+    final depositedTotal = json['deposited_total'] != null
+        ? double.parse(json['deposited_total'].toString())
+        : payments.fold(0.0, (sum, p) => sum + p.amount);
+
+    return CateringOrder(
+      id: json['id'] as int,
+      clientName: json['client_name'] as String,
+      clientPhone: json['client_phone'] as String,
+      eventName: json['event_name'] as String?,
+      eventDate: DateTime.parse(json['event_date'] as String),
+      package: CateringPackage.fromJson(json['package'] as Map<String, dynamic>),
+      pricePerPlate: json['price_per_plate'] != null
+          ? double.parse(json['price_per_plate'].toString())
+          : null,
+      numberOfPlates: json['number_of_plates'] as int,
+      notes: json['notes'] as String?,
+      totalAmount: totalAmount,
+      status: json['status'] as String,
+      payments: payments,
+      depositedTotal: depositedTotal,
+      balanceDue: json['balance_due'] != null
+          ? double.parse(json['balance_due'].toString())
+          : totalAmount - depositedTotal,
+      cancellationFee: json['cancellation_fee'] != null
+          ? double.parse(json['cancellation_fee'].toString())
+          : round2(depositedTotal * 0.5),
+      refundableAmount: json['refundable_amount'] != null
+          ? double.parse(json['refundable_amount'].toString())
+          : round2(depositedTotal * 0.5),
+    );
+  }
 
   final int id;
   final String clientName;
@@ -79,14 +110,29 @@ class CateringOrder {
   final String? eventName;
   final DateTime eventDate;
   final CateringPackage package;
+  final double? pricePerPlate;
   final int numberOfPlates;
+  final String? notes;
   final double totalAmount;
   final String status;
   final List<CateringPayment> payments;
+  final double depositedTotal;
+  final double balanceDue;
+  final double cancellationFee;
+  final double refundableAmount;
 
-  double get balanceDue =>
-      totalAmount - payments.fold(0.0, (sum, p) => sum + p.amount);
+  /// What to call this order's paperwork at its current stage — matches
+  /// the client's "quotation, invoice, receipt" request.
+  String get documentLabel => switch (status) {
+    'quoted' => 'Quotation',
+    'confirmed' || 'delivered' => 'Invoice',
+    'settled' => 'Receipt',
+    'cancelled' => 'Cancellation Notice',
+    _ => 'Order',
+  };
 }
+
+double round2(double value) => (value * 100).round() / 100;
 
 class CateringRepository {
   CateringRepository(this._api);
@@ -141,7 +187,9 @@ class CateringRepository {
     String? eventName,
     required DateTime eventDate,
     required int cateringPackageId,
+    double? pricePerPlate,
     required int numberOfPlates,
+    String? notes,
   }) async {
     final body = await _api.post(
       '/catering-orders',
@@ -151,7 +199,9 @@ class CateringRepository {
         if (eventName != null) 'event_name': eventName,
         'event_date': eventDate.toIso8601String().split('T').first,
         'catering_package_id': cateringPackageId,
+        if (pricePerPlate != null) 'price_per_plate': pricePerPlate,
         'number_of_plates': numberOfPlates,
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
       },
     );
     return CateringOrder.fromJson(body);
