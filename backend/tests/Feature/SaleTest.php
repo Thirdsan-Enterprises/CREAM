@@ -108,6 +108,52 @@ class SaleTest extends TestCase
         $this->assertEquals(-25000, $customer->fresh()->balance());
     }
 
+    public function test_lpo_customer_account_behaves_like_prepaid_floored_at_zero(): void
+    {
+        // LPO is a third account type funded by a purchase order instead of
+        // cash, but it shares the exact same balance mechanics as prepaid —
+        // top up, draw down per sale, reject once it would go negative.
+        $this->seedPlatePrice();
+        $store = Store::factory()->create();
+        $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
+        $customer = Customer::factory()->lpo()->create();
+
+        $this->actingAs($cashier)->postJson("/api/customers/{$customer->id}/deposit", [
+            'amount' => 25000,
+            'note' => 'LPO-2026-0042',
+        ])->assertCreated();
+
+        $this->actingAs($cashier)->postJson('/api/sales', [
+            'payment_method' => 'account',
+            'customer_id' => $customer->id,
+            'lines' => [['item_type' => 'plate', 'qty' => 1]],
+        ])->assertCreated();
+        $this->assertEquals(0, $customer->fresh()->balance());
+
+        $response = $this->actingAs($cashier)->postJson('/api/sales', [
+            'payment_method' => 'account',
+            'customer_id' => $customer->id,
+            'lines' => [['item_type' => 'plate', 'qty' => 1]],
+        ]);
+        $response->assertStatus(422);
+        $response->assertJsonFragment(['This customer does not have sufficient LPO balance remaining.']);
+    }
+
+    public function test_lpo_payment_method_works_as_a_one_off_sale_without_a_customer(): void
+    {
+        // Separately, "lpo" is also a plain payment method for a single sale
+        // covered by a purchase order that isn't tracked against a running
+        // account balance — same shape as cash/momo/airtel.
+        $this->seedPlatePrice();
+        $store = Store::factory()->create();
+        $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
+
+        $this->actingAs($cashier)->postJson('/api/sales', [
+            'payment_method' => 'lpo',
+            'lines' => [['item_type' => 'plate', 'qty' => 2]],
+        ])->assertCreated()->assertJson(['payment_method' => 'lpo', 'total' => 50000]);
+    }
+
     public function test_prepaid_customer_can_deposit_upfront_and_draw_down_across_multiple_days(): void
     {
         // Mirrors the client's real "office lunch tab" scenario: someone pays

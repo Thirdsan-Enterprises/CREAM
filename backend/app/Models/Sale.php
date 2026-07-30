@@ -18,6 +18,8 @@ class Sale extends Model
 
     public const PAYMENT_ACCOUNT = 'account';
 
+    public const PAYMENT_LPO = 'lpo';
+
     protected function casts(): array
     {
         return [

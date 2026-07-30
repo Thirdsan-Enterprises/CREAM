@@ -33,6 +33,72 @@ class CateringTest extends TestCase
         $this->assertEquals('quoted', $response->json('status'));
     }
 
+    public function test_price_per_plate_can_be_overridden_and_notes_recorded(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN, 'store_id' => null]);
+        $package = CateringPackage::factory()->create(['price_per_plate' => 38000]);
+
+        $response = $this->actingAs($admin)->postJson('/api/catering-orders', [
+            'client_name' => 'Jane Doe',
+            'client_phone' => '0700123456',
+            'event_date' => now()->addWeek()->toDateString(),
+            'catering_package_id' => $package->id,
+            'price_per_plate' => 42000,
+            'number_of_plates' => 100,
+            'notes' => 'Extra vegetarian options for 15 guests; deliver by 11am.',
+        ]);
+
+        $response->assertCreated();
+        $this->assertEquals(42000, $response->json('price_per_plate'));
+        $this->assertEquals(4200000, $response->json('total_amount'));
+        $this->assertStringContainsString('vegetarian', $response->json('notes'));
+    }
+
+    public function test_price_per_plate_defaults_to_the_package_price_when_omitted(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN, 'store_id' => null]);
+        $package = CateringPackage::factory()->create(['price_per_plate' => 34000]);
+
+        $response = $this->actingAs($admin)->postJson('/api/catering-orders', [
+            'client_name' => 'Jane Doe',
+            'client_phone' => '0700123456',
+            'event_date' => now()->addWeek()->toDateString(),
+            'catering_package_id' => $package->id,
+            'number_of_plates' => 20,
+        ]);
+
+        $response->assertCreated();
+        $this->assertEquals(34000, $response->json('price_per_plate'));
+        $this->assertEquals(680000, $response->json('total_amount'));
+    }
+
+    public function test_cancelled_order_shows_fifty_percent_non_refundable_deposit(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN, 'store_id' => null]);
+        $package = CateringPackage::factory()->create();
+        $order = CateringOrder::factory()->create([
+            'catering_package_id' => $package->id,
+            'total_amount' => 2000000,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)->postJson("/api/catering-orders/{$order->id}/payments", [
+            'amount' => 800000,
+            'payment_method' => 'momo',
+        ])->assertCreated();
+
+        $response = $this->actingAs($admin)->patchJson("/api/catering-orders/{$order->id}", [
+            'status' => 'cancelled',
+        ]);
+
+        $response->assertOk()->assertJson([
+            'status' => 'cancelled',
+            'deposited_total' => 800000,
+            'cancellation_fee' => 400000,
+            'refundable_amount' => 400000,
+        ]);
+    }
+
     public function test_recording_payments_reduces_balance_due(): void
     {
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN, 'store_id' => null]);

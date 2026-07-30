@@ -8,11 +8,12 @@ import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/formatters/date_formatter.dart';
 import '../../shared/models/customer.dart';
 
-const _accountTypeFilters = <String?>[null, 'prepaid', 'credit'];
+const _accountTypeFilters = <String?>[null, 'prepaid', 'credit', 'lpo'];
 const _accountTypeLabels = {
   null: 'All',
   'prepaid': 'Prepaid',
   'credit': 'Credit',
+  'lpo': 'LPO',
 };
 
 class BackOfficeCustomersScreen extends ConsumerStatefulWidget {
@@ -123,7 +124,8 @@ class _BackOfficeCustomersScreenState
                       child: ListTile(
                         title: Text(customer.name),
                         subtitle: Text(
-                          '${customer.phone} — ${customer.isCredit ? 'Credit (limit ${CurrencyFormatter.format(customer.creditLimit)})' : 'Prepaid'}',
+                          '${customer.phone} — ${customer.accountTypeLabel}'
+                          '${customer.isCredit ? ' (limit ${CurrencyFormatter.format(customer.creditLimit)})' : ''}',
                         ),
                         trailing: Text(
                           balance == null
@@ -234,6 +236,7 @@ class _NewCustomerSheetState extends ConsumerState<_NewCustomerSheet> {
             segments: const [
               ButtonSegment(value: 'prepaid', label: Text('Prepaid')),
               ButtonSegment(value: 'credit', label: Text('Credit')),
+              ButtonSegment(value: 'lpo', label: Text('LPO')),
             ],
             selected: {_accountType},
             onSelectionChanged: (value) =>
@@ -314,7 +317,7 @@ class _CustomerDetailSheetState extends ConsumerState<_CustomerDetailSheet> {
                   Text(
                     data.customer.isCredit
                         ? 'Credit — limit ${CurrencyFormatter.format(data.customer.creditLimit)}'
-                        : 'Prepaid',
+                        : data.customer.accountTypeLabel,
                   ),
                   const SizedBox(height: 12),
                   Text(

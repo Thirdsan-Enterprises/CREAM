@@ -287,7 +287,10 @@ class _TransferTab extends ConsumerStatefulWidget {
 
 class _TransferTabState extends ConsumerState<_TransferTab> {
   late Future<void> _future;
+  // Only items Kira actually has on hand — you can't dispatch what isn't
+  // there. New items get their first stock via the Purchase tab, not here.
   List<Item> _items = [];
+  Map<int, double> _balances = {};
   List<Store> _outlets = [];
   Store? _toStore;
   final List<_TransferLine> _lines = [_TransferLine()];
@@ -300,21 +303,24 @@ class _TransferTabState extends ConsumerState<_TransferTab> {
   }
 
   Future<void> _load() async {
-    final items = await ref.read(itemsRepositoryProvider).items();
+    final allItems = await ref.read(itemsRepositoryProvider).items();
     final stores = await ref.read(storesRepositoryProvider).all();
+    final kira = stores.firstWhere((s) => s.isMain);
+    final statuses = await ref
+        .read(stockRepositoryProvider)
+        .status(storeId: kira.id);
+
+    final balances = {
+      for (final s in statuses)
+        if (s.balance > 0) s.itemId: s.balance,
+    };
+    final inStock = allItems.where((i) => balances.containsKey(i.id)).toList();
+
     if (!mounted) return;
     setState(() {
-      _items = items;
+      _items = inStock;
+      _balances = balances;
       _outlets = stores.where((s) => !s.isMain).toList();
-    });
-  }
-
-  Future<void> _addNewItem(_TransferLine line) async {
-    final created = await _promptCreateItem(context, ref);
-    if (created == null) return;
-    setState(() {
-      _items = [..._items, created];
-      line.item = created;
     });
   }
 
@@ -390,28 +396,25 @@ class _TransferTabState extends ConsumerState<_TransferTab> {
                     children: [
                       Expanded(
                         flex: 2,
-                        child: DropdownButtonFormField<Item>(
-                          initialValue: line.item,
-                          decoration: const InputDecoration(labelText: 'Item'),
-                          items: [
-                            DropdownMenuItem(
-                              value: _addNewItemSentinel,
-                              child: Text(_addNewItemSentinel.name),
-                            ),
-                            for (final item in _items)
-                              DropdownMenuItem(
-                                value: item,
-                                child: Text(item.name),
+                        child: _items.isEmpty
+                            ? const Text('Kira has no stocked items yet.')
+                            : DropdownButtonFormField<Item>(
+                                initialValue: line.item,
+                                decoration: const InputDecoration(
+                                  labelText: 'Item',
+                                ),
+                                items: [
+                                  for (final item in _items)
+                                    DropdownMenuItem(
+                                      value: item,
+                                      child: Text(
+                                        '${item.name} (${_balances[item.id]?.toStringAsFixed(0)} ${item.unit} available)',
+                                      ),
+                                    ),
+                                ],
+                                onChanged: (value) =>
+                                    setState(() => line.item = value),
                               ),
-                          ],
-                          onChanged: (value) {
-                            if (value?.id == _addNewItemSentinel.id) {
-                              _addNewItem(line);
-                              return;
-                            }
-                            setState(() => line.item = value);
-                          },
-                        ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(

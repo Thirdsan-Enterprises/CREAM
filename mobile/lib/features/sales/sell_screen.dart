@@ -60,12 +60,16 @@ class _CustomerAvailabilityNotice extends StatelessWidget {
   }
 }
 
-const _paymentMethods = ['cash', 'momo', 'airtel', 'account'];
+const _paymentMethods = ['cash', 'momo', 'airtel', 'account', 'lpo'];
 const _paymentLabels = {
   'cash': 'Cash',
   'momo': 'MoMo',
   'airtel': 'Airtel',
   'account': 'Account',
+  // A one-off sale covered by a purchase order, no running balance —
+  // distinct from an "Account" sale charged to an LPO-funded customer,
+  // which is for a pool drawn down over many meals (see Accounts/Customers).
+  'lpo': 'LPO',
 };
 
 class SellScreen extends ConsumerStatefulWidget {
@@ -370,7 +374,7 @@ class _SellScreenState extends ConsumerState<SellScreen> {
                     title: Text(_selectedCustomer?.name ?? 'Select customer'),
                     subtitle: _selectedCustomer != null
                         ? Text(
-                            '${_selectedCustomer!.phone} — ${_selectedCustomer!.isCredit ? 'Credit' : 'Prepaid'}',
+                            '${_selectedCustomer!.phone} — ${_selectedCustomer!.accountTypeLabel}',
                           )
                         : null,
                     trailing: const Icon(Icons.chevron_right),

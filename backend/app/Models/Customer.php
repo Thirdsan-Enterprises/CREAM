@@ -17,6 +17,8 @@ class Customer extends Model
 
     public const TYPE_CREDIT = 'credit';
 
+    public const TYPE_LPO = 'lpo';
+
     protected function casts(): array
     {
         return [

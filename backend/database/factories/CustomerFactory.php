@@ -30,4 +30,12 @@ class CustomerFactory extends Factory
             'credit_limit' => $limit,
         ]);
     }
+
+    public function lpo(): self
+    {
+        return $this->state(fn () => [
+            'account_type' => Customer::TYPE_LPO,
+            'credit_limit' => 0,
+        ]);
+    }
 }

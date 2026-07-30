@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Item;
+use App\Models\StockMovement;
 use App\Models\StockTransfer;
 use App\Models\Store;
 use App\Models\User;
@@ -13,11 +14,38 @@ class StockTransferTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_dispatch_is_rejected_when_kira_does_not_have_enough_stock(): void
+    {
+        $kira = Store::factory()->create(['is_main' => true]);
+        $lugogo = Store::factory()->create(['is_main' => false]);
+        $item = Item::factory()->create(['name' => 'Rice', 'unit' => 'kg']);
+        StockMovement::create([
+            'item_id' => $item->id, 'store_id' => $kira->id, 'type' => 'purchase',
+            'qty' => 10, 'user_id' => User::factory()->create()->id, 'occurred_at' => now(),
+        ]);
+        $storekeeper = User::factory()->create(['role' => User::ROLE_STOREKEEPER, 'store_id' => $kira->id]);
+
+        $response = $this->actingAs($storekeeper)->postJson('/api/transfers', [
+            'to_store_id' => $lugogo->id,
+            'items' => [['item_id' => $item->id, 'qty' => 20]],
+        ]);
+
+        $response->assertStatus(422);
+        $this->assertStringContainsString('Only 10 kg of Rice available', $response->json('errors.items.0'));
+        $this->assertDatabaseMissing('stock_movements', [
+            'item_id' => $item->id, 'store_id' => $kira->id, 'type' => 'transfer_out',
+        ]);
+    }
+
     public function test_dispatch_then_confirm_matching_quantities_marks_transfer_confirmed(): void
     {
         $kira = Store::factory()->create(['is_main' => true]);
         $lugogo = Store::factory()->create(['is_main' => false]);
         $item = Item::factory()->create();
+        StockMovement::create([
+            'item_id' => $item->id, 'store_id' => $kira->id, 'type' => 'purchase',
+            'qty' => 20, 'user_id' => User::factory()->create()->id, 'occurred_at' => now(),
+        ]);
         $storekeeper = User::factory()->create(['role' => User::ROLE_STOREKEEPER, 'store_id' => $kira->id]);
         $manager = User::factory()->create(['role' => User::ROLE_STORE_MANAGER, 'store_id' => $lugogo->id]);
 
@@ -48,6 +76,10 @@ class StockTransferTest extends TestCase
         $kira = Store::factory()->create(['is_main' => true]);
         $lugogo = Store::factory()->create(['is_main' => false]);
         $item = Item::factory()->create();
+        StockMovement::create([
+            'item_id' => $item->id, 'store_id' => $kira->id, 'type' => 'purchase',
+            'qty' => 20, 'user_id' => User::factory()->create()->id, 'occurred_at' => now(),
+        ]);
         $storekeeper = User::factory()->create(['role' => User::ROLE_STOREKEEPER, 'store_id' => $kira->id]);
         $manager = User::factory()->create(['role' => User::ROLE_STORE_MANAGER, 'store_id' => $lugogo->id]);
 
@@ -71,6 +103,10 @@ class StockTransferTest extends TestCase
         $kira = Store::factory()->create(['is_main' => true]);
         $lugogo = Store::factory()->create(['is_main' => false]);
         $item = Item::factory()->create();
+        StockMovement::create([
+            'item_id' => $item->id, 'store_id' => $kira->id, 'type' => 'purchase',
+            'qty' => 20, 'user_id' => User::factory()->create()->id, 'occurred_at' => now(),
+        ]);
         $storekeeper = User::factory()->create(['role' => User::ROLE_STOREKEEPER, 'store_id' => $kira->id]);
         $manager = User::factory()->create(['role' => User::ROLE_STORE_MANAGER, 'store_id' => $lugogo->id]);
 
@@ -97,6 +133,10 @@ class StockTransferTest extends TestCase
         $lugogo = Store::factory()->create(['is_main' => false]);
         $town = Store::factory()->create(['is_main' => false]);
         $item = Item::factory()->create();
+        StockMovement::create([
+            'item_id' => $item->id, 'store_id' => $kira->id, 'type' => 'purchase',
+            'qty' => 20, 'user_id' => User::factory()->create()->id, 'occurred_at' => now(),
+        ]);
         $storekeeper = User::factory()->create(['role' => User::ROLE_STOREKEEPER, 'store_id' => $kira->id]);
         $townManager = User::factory()->create(['role' => User::ROLE_STORE_MANAGER, 'store_id' => $town->id]);
 

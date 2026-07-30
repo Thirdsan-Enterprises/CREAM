@@ -43,7 +43,7 @@ class CustomerController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'unique:customers,phone'],
-            'account_type' => ['required', Rule::in([Customer::TYPE_PREPAID, Customer::TYPE_CREDIT])],
+            'account_type' => ['required', Rule::in([Customer::TYPE_PREPAID, Customer::TYPE_CREDIT, Customer::TYPE_LPO])],
             'credit_limit' => ['nullable', 'numeric', 'min:0'],
         ]);
 
