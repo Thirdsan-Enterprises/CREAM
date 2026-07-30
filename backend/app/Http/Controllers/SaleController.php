@@ -55,7 +55,7 @@ class SaleController extends Controller
         $data = $request->validate([
             'store_id' => ['nullable', 'exists:stores,id'],
             'payment_method' => ['required', Rule::in([
-                Sale::PAYMENT_CASH, Sale::PAYMENT_MOMO, Sale::PAYMENT_AIRTEL, Sale::PAYMENT_ACCOUNT,
+                Sale::PAYMENT_CASH, Sale::PAYMENT_MOMO, Sale::PAYMENT_AIRTEL, Sale::PAYMENT_ACCOUNT, Sale::PAYMENT_LPO,
             ])],
             'customer_id' => ['nullable', 'exists:customers,id', 'required_if:payment_method,'.Sale::PAYMENT_ACCOUNT],
             'lines' => ['required', 'array', 'min:1'],

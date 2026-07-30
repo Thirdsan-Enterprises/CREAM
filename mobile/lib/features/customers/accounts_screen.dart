@@ -8,11 +8,12 @@ import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/formatters/date_formatter.dart';
 import '../../shared/models/customer.dart';
 
-const _accountTypeFilters = <String?>[null, 'prepaid', 'credit'];
+const _accountTypeFilters = <String?>[null, 'prepaid', 'credit', 'lpo'];
 const _accountTypeLabels = {
   null: 'All',
   'prepaid': 'Prepaid',
   'credit': 'Credit',
+  'lpo': 'LPO',
 };
 
 class AccountsScreen extends ConsumerStatefulWidget {
@@ -142,7 +143,7 @@ class _CustomerTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Chip(
-              label: Text(customer.isCredit ? 'Credit' : 'Prepaid'),
+              label: Text(customer.accountTypeLabel),
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -178,6 +179,7 @@ class _CustomerDetailSheetState extends ConsumerState<_CustomerDetailSheet> {
   late Future<({Customer customer, double balance, List<LedgerEntry> entries})>
   _future;
   final _depositController = TextEditingController();
+  final _referenceController = TextEditingController();
   bool _depositing = false;
   bool _changed = false;
 
@@ -206,8 +208,13 @@ class _CustomerDetailSheetState extends ConsumerState<_CustomerDetailSheet> {
     try {
       await ref
           .read(customersRepositoryProvider)
-          .deposit(widget.customer.id, amount);
+          .deposit(
+            widget.customer.id,
+            amount,
+            note: _referenceController.text.trim(),
+          );
       _depositController.clear();
+      _referenceController.clear();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -227,6 +234,7 @@ class _CustomerDetailSheetState extends ConsumerState<_CustomerDetailSheet> {
   @override
   void dispose() {
     _depositController.dispose();
+    _referenceController.dispose();
     super.dispose();
   }
 
@@ -265,7 +273,8 @@ class _CustomerDetailSheetState extends ConsumerState<_CustomerDetailSheet> {
                     ],
                   ),
                   Text(
-                    '${data.customer.phone} — ${data.customer.isCredit ? 'Credit (limit ${CurrencyFormatter.format(data.customer.creditLimit)})' : 'Prepaid'}',
+                    '${data.customer.phone} — ${data.customer.accountTypeLabel}'
+                    '${data.customer.isCredit ? ' (limit ${CurrencyFormatter.format(data.customer.creditLimit)})' : ''}',
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -277,6 +286,15 @@ class _CustomerDetailSheetState extends ConsumerState<_CustomerDetailSheet> {
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 16),
+                  TextField(
+                    controller: _referenceController,
+                    decoration: InputDecoration(
+                      labelText: data.customer.isLpo
+                          ? 'LPO reference/number (optional)'
+                          : 'Reference/note (optional)',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(

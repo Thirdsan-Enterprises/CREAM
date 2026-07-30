@@ -9,8 +9,11 @@ class StockRepository {
 
   final ApiClient _api;
 
-  Future<List<StoreItemStatus>> status() async {
-    final body = await _api.get('/stock/status');
+  Future<List<StoreItemStatus>> status({int? storeId}) async {
+    final body = await _api.get(
+      '/stock/status',
+      query: {if (storeId != null) 'store_id': storeId},
+    );
     return (body['items'] as List<dynamic>)
         .map((e) => StoreItemStatus.fromJson(e as Map<String, dynamic>))
         .toList();

@@ -27,6 +27,21 @@ class CustomerTest extends TestCase
         $this->assertDatabaseHas('customers', ['phone' => '0700999888', 'account_type' => 'prepaid']);
     }
 
+    public function test_cashier_can_create_an_lpo_customer_account(): void
+    {
+        $store = Store::factory()->create();
+        $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
+
+        $response = $this->actingAs($cashier)->postJson('/api/customers', [
+            'name' => 'Acme Ltd (Office Lunch)',
+            'phone' => '0700999777',
+            'account_type' => 'lpo',
+        ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('customers', ['phone' => '0700999777', 'account_type' => 'lpo']);
+    }
+
     public function test_search_finds_customer_by_name_or_phone(): void
     {
         $store = Store::factory()->create();

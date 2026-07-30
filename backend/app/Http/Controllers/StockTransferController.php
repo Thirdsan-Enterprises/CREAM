@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Item;
 use App\Models\StockMovement;
 use App\Models\StockTransfer;
 use App\Models\Store;
+use App\Services\StockService;
 use App\Support\StoreScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -12,6 +14,8 @@ use Illuminate\Validation\ValidationException;
 
 class StockTransferController extends Controller
 {
+    public function __construct(private readonly StockService $stockService) {}
+
     public function index(Request $request)
     {
         $user = $request->user();
@@ -59,6 +63,16 @@ class StockTransferController extends Controller
 
         if (! $user->isAdmin() && $user->store_id !== $fromStore->id) {
             abort(403, 'Only the main store can dispatch transfers.');
+        }
+
+        foreach ($data['items'] as $line) {
+            $balance = $this->stockService->balance($line['item_id'], $fromStore->id);
+            if ($line['qty'] > $balance) {
+                $item = Item::find($line['item_id']);
+                throw ValidationException::withMessages([
+                    'items' => ["Only {$balance} {$item?->unit} of {$item?->name} available at {$fromStore->name} — cannot dispatch {$line['qty']}."],
+                ]);
+            }
         }
 
         $transfer = DB::transaction(function () use ($data, $fromStore, $user) {

@@ -24,11 +24,18 @@ class Customer {
   final int id;
   final String name;
   final String phone;
-  final String accountType; // 'prepaid' or 'credit'
+  final String accountType; // 'prepaid', 'credit', or 'lpo'
   final double creditLimit;
   final double? balance;
 
   bool get isCredit => accountType == 'credit';
+  bool get isLpo => accountType == 'lpo';
+
+  String get accountTypeLabel => switch (accountType) {
+    'credit' => 'Credit',
+    'lpo' => 'LPO',
+    _ => 'Prepaid',
+  };
 }
 
 class LedgerEntry {

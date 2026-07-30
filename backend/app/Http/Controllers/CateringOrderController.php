@@ -33,12 +33,16 @@ class CateringOrderController extends Controller
             $query->whereDate('event_date', '<=', $request->date('to'));
         }
 
-        return $query->paginate();
+        return $query->paginate()->through(
+            fn (CateringOrder $order) => [...$order->toArray(), ...$order->financialSummary()]
+        );
     }
 
     public function show(CateringOrder $cateringOrder)
     {
-        return $cateringOrder->load(['package', 'payments', 'createdBy']);
+        $cateringOrder->load(['package', 'payments', 'createdBy']);
+
+        return response()->json([...$cateringOrder->toArray(), ...$cateringOrder->financialSummary()]);
     }
 
     public function store(Request $request)
@@ -49,19 +53,25 @@ class CateringOrderController extends Controller
             'event_name' => ['nullable', 'string', 'max:255'],
             'event_date' => ['required', 'date'],
             'catering_package_id' => ['required', 'exists:catering_packages,id'],
+            // Defaults to the package's price when omitted — this is the "add
+            // a price" override the client asked for on new orders.
+            'price_per_plate' => ['nullable', 'numeric', 'min:0'],
             'number_of_plates' => ['required', 'integer', 'min:1'],
+            'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
         $package = CateringPackage::findOrFail($data['catering_package_id']);
+        $pricePerPlate = $data['price_per_plate'] ?? (float) $package->price_per_plate;
 
         $order = CateringOrder::create([
             ...$data,
-            'total_amount' => $package->price_per_plate * $data['number_of_plates'],
+            'price_per_plate' => $pricePerPlate,
+            'total_amount' => $pricePerPlate * $data['number_of_plates'],
             'status' => CateringOrder::STATUS_QUOTED,
             'created_by' => $request->user()->id,
         ]);
 
-        return response()->json($order->load('package'), 201);
+        return response()->json([...$order->load('package')->toArray(), ...$order->financialSummary()], 201);
     }
 
     public function update(Request $request, CateringOrder $cateringOrder)
@@ -72,20 +82,26 @@ class CateringOrderController extends Controller
             'event_name' => ['nullable', 'string', 'max:255'],
             'event_date' => ['sometimes', 'date'],
             'catering_package_id' => ['sometimes', 'exists:catering_packages,id'],
+            'price_per_plate' => ['sometimes', 'numeric', 'min:0'],
             'number_of_plates' => ['sometimes', 'integer', 'min:1'],
+            'notes' => ['nullable', 'string', 'max:2000'],
             'status' => ['sometimes', Rule::in(self::STATUSES)],
         ]);
 
         $cateringOrder->fill($data);
 
-        if ($cateringOrder->isDirty('catering_package_id') || $cateringOrder->isDirty('number_of_plates')) {
+        if ($cateringOrder->isDirty('catering_package_id') && ! $request->filled('price_per_plate')) {
             $package = CateringPackage::findOrFail($cateringOrder->catering_package_id);
-            $cateringOrder->total_amount = $package->price_per_plate * $cateringOrder->number_of_plates;
+            $cateringOrder->price_per_plate = $package->price_per_plate;
+        }
+
+        if ($cateringOrder->isDirty('price_per_plate') || $cateringOrder->isDirty('number_of_plates')) {
+            $cateringOrder->total_amount = $cateringOrder->price_per_plate * $cateringOrder->number_of_plates;
         }
 
         $cateringOrder->save();
 
-        return $cateringOrder->load('package');
+        return response()->json([...$cateringOrder->load('package')->toArray(), ...$cateringOrder->financialSummary()]);
     }
 
     public function addPayment(Request $request, CateringOrder $cateringOrder)
