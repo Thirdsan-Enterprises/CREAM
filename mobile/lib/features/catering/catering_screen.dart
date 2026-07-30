@@ -3,10 +3,86 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/api/repositories/catering_repository.dart';
+import '../../core/theme/app_colors.dart';
 import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/formatters/date_formatter.dart';
 
 const _statuses = ['quoted', 'confirmed', 'delivered', 'settled', 'cancelled'];
+
+/// Deposited/balance figures the client asked to see per status, plus the
+/// 50%-non-refundable breakdown that only applies once an order is
+/// cancelled.
+class _FinancialsCard extends StatelessWidget {
+  const _FinancialsCard({required this.order});
+
+  final CateringOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _row(context, 'Total', order.totalAmount),
+            _row(context, 'Deposited', order.depositedTotal),
+            _row(
+              context,
+              'Balance due',
+              order.balanceDue,
+              emphasize: true,
+            ),
+            if (order.status == 'cancelled') ...[
+              const Divider(height: 20),
+              Text(
+                'Cancelled booking — 50% of the deposit is forfeited per policy.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 6),
+              _row(
+                context,
+                'Non-refundable fee',
+                order.cancellationFee,
+                color: AppColors.danger,
+              ),
+              _row(
+                context,
+                'Refundable to client',
+                order.refundableAmount,
+                color: AppColors.success,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row(
+    BuildContext context,
+    String label,
+    double amount, {
+    bool emphasize = false,
+    Color? color,
+  }) {
+    final style = (emphasize
+            ? Theme.of(context).textTheme.titleMedium
+            : Theme.of(context).textTheme.bodyMedium)
+        ?.copyWith(color: color, fontWeight: emphasize ? FontWeight.bold : null);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: style),
+          Text(CurrencyFormatter.format(amount), style: style),
+        ],
+      ),
+    );
+  }
+}
 
 class CateringScreen extends StatelessWidget {
   const CateringScreen({super.key});
@@ -126,8 +202,10 @@ class _PipelineTabState extends ConsumerState<_PipelineTab> {
                           '${order.clientName} — ${order.package.name}',
                         ),
                         subtitle: Text(
-                          '${DateFormatter.date(order.eventDate)} — ${order.numberOfPlates} plates — balance due ${CurrencyFormatter.format(order.balanceDue)}',
+                          '${DateFormatter.date(order.eventDate)} — ${order.numberOfPlates} plates\n'
+                          'Deposited ${CurrencyFormatter.format(order.depositedTotal)} — balance due ${CurrencyFormatter.format(order.balanceDue)}',
                         ),
+                        isThreeLine: true,
                         trailing: Chip(label: Text(order.status)),
                         onTap: () => _openOrder(order),
                       ),
@@ -153,7 +231,7 @@ class _OrderDetailSheet extends ConsumerStatefulWidget {
 }
 
 class _OrderDetailSheetState extends ConsumerState<_OrderDetailSheet> {
-  late String _status;
+  late CateringOrder _order;
   final _amountController = TextEditingController();
   String _paymentMethod = 'cash';
   bool _busy = false;
@@ -161,7 +239,7 @@ class _OrderDetailSheetState extends ConsumerState<_OrderDetailSheet> {
   @override
   void initState() {
     super.initState();
-    _status = widget.order.status;
+    _order = widget.order;
   }
 
   @override
@@ -173,11 +251,14 @@ class _OrderDetailSheetState extends ConsumerState<_OrderDetailSheet> {
   Future<void> _updateStatus(String status) async {
     setState(() => _busy = true);
     try {
-      await ref
+      final updated = await ref
           .read(cateringRepositoryProvider)
-          .updateStatus(widget.order.id, status);
+          .updateStatus(_order.id, status);
       if (!mounted) return;
-      setState(() => _status = status);
+      // Refresh in place — this is what makes the cancellation-fee
+      // breakdown show up immediately after switching to "cancelled"
+      // instead of only after closing and reopening the sheet.
+      setState(() => _order = updated);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Status updated.')));
@@ -201,7 +282,7 @@ class _OrderDetailSheetState extends ConsumerState<_OrderDetailSheet> {
       await ref
           .read(cateringRepositoryProvider)
           .addPayment(
-            widget.order.id,
+            _order.id,
             amount: amount,
             paymentMethod: _paymentMethod,
           );
@@ -224,7 +305,7 @@ class _OrderDetailSheetState extends ConsumerState<_OrderDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final order = widget.order;
+    final order = _order;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -237,16 +318,42 @@ class _OrderDetailSheetState extends ConsumerState<_OrderDetailSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Document-style header — "Quotation" while just quoted,
+            // "Invoice" once confirmed/delivered, "Receipt" once settled.
+            Text(
+              order.documentLabel,
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(letterSpacing: 1.2),
+            ),
             Text(
               order.clientName,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             Text('${order.clientPhone} — ${order.package.name}'),
+            const SizedBox(height: 4),
+            Text(
+              'Event date: ${DateFormatter.date(order.eventDate)}'
+              '${order.eventName != null ? ' — ${order.eventName}' : ''}',
+              style: order.status == 'delivered'
+                  ? Theme.of(context).textTheme.titleMedium
+                  : null,
+            ),
             const SizedBox(height: 8),
             Text(
-              '${order.numberOfPlates} plates — ${CurrencyFormatter.format(order.totalAmount)}',
+              '${order.numberOfPlates} plates'
+              '${order.pricePerPlate != null ? ' @ ${CurrencyFormatter.format(order.pricePerPlate!)}' : ''}'
+              ' — ${CurrencyFormatter.format(order.totalAmount)}',
             ),
-            Text('Balance due: ${CurrencyFormatter.format(order.balanceDue)}'),
+            if (order.notes != null && order.notes!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                order.notes!,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            const SizedBox(height: 12),
+            _FinancialsCard(order: order),
             const SizedBox(height: 16),
             Text('Status', style: Theme.of(context).textTheme.labelLarge),
             Wrap(
@@ -255,7 +362,7 @@ class _OrderDetailSheetState extends ConsumerState<_OrderDetailSheet> {
                 for (final status in _statuses)
                   ChoiceChip(
                     label: Text(status),
-                    selected: _status == status,
+                    selected: order.status == status,
                     onSelected: _busy ? null : (_) => _updateStatus(status),
                   ),
               ],
@@ -311,6 +418,8 @@ class _NewOrderTabState extends ConsumerState<_NewOrderTab> {
   final _phoneController = TextEditingController();
   final _eventNameController = TextEditingController();
   final _platesController = TextEditingController();
+  final _priceController = TextEditingController();
+  final _notesController = TextEditingController();
   DateTime _eventDate = DateTime.now().add(const Duration(days: 7));
   CateringPackage? _package;
   bool _submitting = false;
@@ -328,6 +437,8 @@ class _NewOrderTabState extends ConsumerState<_NewOrderTab> {
     _phoneController.dispose();
     _eventNameController.dispose();
     _platesController.dispose();
+    _priceController.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
@@ -363,7 +474,9 @@ class _NewOrderTabState extends ConsumerState<_NewOrderTab> {
                 : _eventNameController.text,
             eventDate: _eventDate,
             cateringPackageId: _package!.id,
+            pricePerPlate: double.tryParse(_priceController.text),
             numberOfPlates: plates,
+            notes: _notesController.text,
           );
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -374,6 +487,8 @@ class _NewOrderTabState extends ConsumerState<_NewOrderTab> {
         _phoneController.clear();
         _eventNameController.clear();
         _platesController.clear();
+        _priceController.clear();
+        _notesController.clear();
         _package = null;
       });
     } catch (e) {
@@ -437,7 +552,23 @@ class _NewOrderTabState extends ConsumerState<_NewOrderTab> {
                       ),
                     ),
                 ],
-                onChanged: (value) => setState(() => _package = value),
+                onChanged: (value) => setState(() {
+                  _package = value;
+                  // Prefill from the package as a starting point — the field
+                  // stays editable so a negotiated price can override it.
+                  if (value != null && _priceController.text.isEmpty) {
+                    _priceController.text = value.pricePerPlate.toStringAsFixed(0);
+                  }
+                }),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _priceController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Price per plate (override, optional)',
+                  helperText: 'Defaults to the package price above if left blank',
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -445,6 +576,17 @@ class _NewOrderTabState extends ConsumerState<_NewOrderTab> {
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Number of plates',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _notesController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Additional details (optional)',
+                  hintText:
+                      'Dietary requirements, delivery instructions, etc.',
+                  alignLabelWithHint: true,
                 ),
               ),
               const SizedBox(height: 20),
