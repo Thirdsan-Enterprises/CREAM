@@ -10,55 +10,68 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
-  build-and-push:
+  deploy:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
-    outputs:
-      image: ${{ steps.meta.outputs.image }}
     steps:
       - uses: actions/checkout@v6
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          php-version: '8.4'
+          tools: composer:v2
 
-      - name: Set image tag
-        id: meta
+      - name: Install PHP dependencies (production)
+        run: composer install --no-dev --optimize-autoloader --prefer-dist --no-interaction
+
+      - name: Package release
         run: |
-          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "image=ghcr.io/$owner/cream-backend:${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          echo "latest=ghcr.io/$owner/cream-backend:latest" >> "$GITHUB_OUTPUT"
+          tar czf ../release.tar.gz \
+            --exclude='.env' \
+            --exclude='.env.example' \
+            --exclude='storage' \
+            --exclude='tests' \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitignore' \
+            .
 
-      - name: Build and push image
-        uses: docker/build-push-action@v6
+      - name: Upload release to DirectAdmin
+        uses: appleboy/scp-action@v0.1.7
         with:
-          context: backend
-          push: true
-          tags: |
-            ${{ steps.meta.outputs.image }}
-            ${{ steps.meta.outputs.latest }}
+          host: ${{ secrets.DA_HOST }}
+          username: ${{ secrets.DA_USER }}
+          key: ${{ secrets.DA_SSH_KEY }}
+          port: ${{ secrets.DA_PORT }}
+          source: 'release.tar.gz'
+          target: '/tmp'
 
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to VPS over SSH
+      - name: Extract and finalize on server
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
+          host: ${{ secrets.DA_HOST }}
+          username: ${{ secrets.DA_USER }}
+          key: ${{ secrets.DA_SSH_KEY }}
+          port: ${{ secrets.DA_PORT }}
           script: |
-            cd ${{ secrets.VPS_CREAM_DIR }}
-            export IMAGE=${{ needs.build-and-push.outputs.image }}
-            docker compose pull
-            IMAGE=$IMAGE docker compose up -d --remove-orphans
-            docker image prune -f
+            set -e
+            APP_DIR="${{ secrets.DA_APP_DIR }}"
+            PHP_BIN="${{ secrets.DA_PHP_BIN }}"
+            mkdir -p "$APP_DIR/storage/framework/cache" \
+                     "$APP_DIR/storage/framework/sessions" \
+                     "$APP_DIR/storage/framework/views" \
+                     "$APP_DIR/storage/logs" \
+                     "$APP_DIR/bootstrap/cache"
+            tar xzf /tmp/release.tar.gz -C "$APP_DIR"
+            rm -f /tmp/release.tar.gz
+            cd "$APP_DIR"
+            "$PHP_BIN" artisan migrate --force
+            "$PHP_BIN" artisan config:cache
+            "$PHP_BIN" artisan route:cache
+            "$PHP_BIN" artisan view:cache
+            "$PHP_BIN" artisan storage:link || true
