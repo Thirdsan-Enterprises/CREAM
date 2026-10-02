@@ -208,6 +208,8 @@ GET    /api/reports/dashboard                (admin — all stores today: sales,
 GET    /api/reports/stock-status             (per store: Sufficient / Re-Order)
 GET    /api/reports/outstanding-credit        (customers with negative balance, aging)
 GET    /api/reports/catering-pipeline
+GET    /api/reports/branches                 (admin — every branch side by side for a period: revenue, change vs previous period, plates/drinks, payment mix, re-order count, last sale; daily + hourly series)
+GET    /api/reports/branches/{store}         (admin, or that store's manager — one branch in depth: series, payment mix, sales by staff, drinks, stock used, re-order items, transfers, latest sales)
 ```
 
 All list endpoints support pagination. All write endpoints validate role + store scope server-side (a cashier token must not be able to hit another store's data even if store_id is passed manually).

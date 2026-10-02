@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\BranchReportController;
 use App\Http\Controllers\CateringOrderController;
 use App\Http\Controllers\CateringPackageController;
 use App\Http\Controllers\CustomerController;
@@ -78,6 +79,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/stock-status', [ReportController::class, 'stockStatus']);
         Route::get('/reports/outstanding-credit', [ReportController::class, 'outstandingCredit']);
         Route::get('/reports/catering-pipeline', [ReportController::class, 'cateringPipeline']);
+        Route::get('/reports/branches', [BranchReportController::class, 'index']);
     });
 
     Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STOREKEEPER.','.User::ROLE_STORE_MANAGER)->group(function () {
@@ -92,5 +94,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STORE_MANAGER)->group(function () {
         Route::post('/stock/adjustment', [StockMovementController::class, 'adjustment']);
+        Route::get('/reports/branches/{store}', [BranchReportController::class, 'show']);
     });
 });

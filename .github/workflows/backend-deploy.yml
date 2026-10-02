@@ -75,3 +75,24 @@ jobs:
             "$PHP_BIN" artisan route:cache
             "$PHP_BIN" artisan view:cache
             "$PHP_BIN" artisan storage:link || true
+
+      # Migrations run with the CLI PHP, which can differ from the PHP the
+      # website runs on — a mismatch once left every request (login
+      # included) returning 500 while this workflow stayed green. Hit the
+      # live health endpoint so a broken site fails the deploy instead.
+      - name: Check the live API responds
+        env:
+          HEALTH_URL: ${{ vars.API_HEALTH_URL || 'https://cream.ambozygraphics.com/up' }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            status=$(curl -s -o /tmp/health.txt -w '%{http_code}' "$HEALTH_URL" || true)
+            if [ "$status" = "200" ]; then
+              echo "Live API is healthy ($HEALTH_URL)"
+              exit 0
+            fi
+            echo "Attempt $attempt: $HEALTH_URL returned $status"
+            sleep 6
+          done
+          echo "::error::Live API is not healthy after deploy. Response:"
+          head -c 1000 /tmp/health.txt
+          exit 1

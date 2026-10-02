@@ -68,6 +68,14 @@ return [
     'timezone' => 'UTC',
 
     /*
+    | Timestamps are stored in UTC, but Cream's trading day runs on Kampala
+    | time. Reports use this zone to decide which day and hour a sale
+    | belongs to, so "today" means today in Kampala rather than in UTC.
+    */
+
+    'business_timezone' => env('BUSINESS_TIMEZONE', 'Africa/Kampala'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------
