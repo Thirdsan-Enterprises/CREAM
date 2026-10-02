@@ -1,0 +1,260 @@
+{
+ "store": {
+  "id": 2,
+  "name": "Lugogo",
+  "is_main": false
+ },
+ "period": {
+  "from": "2026-10-02",
+  "to": "2026-10-02",
+  "days": 1,
+  "timezone": "Africa/Kampala"
+ },
+ "previous_period": {
+  "from": "2026-10-01",
+  "to": "2026-10-01",
+  "days": 1,
+  "timezone": "Africa/Kampala"
+ },
+ "totals": {
+  "revenue": 111000,
+  "previous_revenue": 0,
+  "change_pct": null,
+  "sales_count": 3,
+  "average_sale": 37000,
+  "plates_sold": 4,
+  "plate_revenue": 100000,
+  "drinks_sold": 4,
+  "drink_revenue": 11000
+ },
+ "daily": [
+  {
+   "date": "2026-10-02",
+   "revenue": 111000,
+   "sales_count": 3,
+   "plates_sold": 4
+  }
+ ],
+ "hourly": [
+  {
+   "hour": 0,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 1,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 2,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 3,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 4,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 5,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 6,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 7,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 8,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 9,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 10,
+   "revenue": 56000,
+   "sales_count": 1
+  },
+  {
+   "hour": 11,
+   "revenue": 55000,
+   "sales_count": 2
+  },
+  {
+   "hour": 12,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 13,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 14,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 15,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 16,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 17,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 18,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 19,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 20,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 21,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 22,
+   "revenue": 0,
+   "sales_count": 0
+  },
+  {
+   "hour": 23,
+   "revenue": 0,
+   "sales_count": 0
+  }
+ ],
+ "by_payment_method": [
+  {
+   "method": "cash",
+   "revenue": 81000,
+   "sales_count": 2
+  },
+  {
+   "method": "airtel",
+   "revenue": 30000,
+   "sales_count": 1
+  }
+ ],
+ "by_cashier": [
+  {
+   "user_id": 2,
+   "name": "Sarah",
+   "revenue": 86000,
+   "sales_count": 2,
+   "plates_sold": 3
+  },
+  {
+   "user_id": 3,
+   "name": "Peter",
+   "revenue": 25000,
+   "sales_count": 1,
+   "plates_sold": 1
+  }
+ ],
+ "drinks": [
+  {
+   "item_id": 1,
+   "name": "Soda",
+   "qty": 3,
+   "revenue": 6000
+  },
+  {
+   "item_id": 2,
+   "name": "Passion Juice",
+   "qty": 1,
+   "revenue": 5000
+  }
+ ],
+ "stock_used": [
+  {
+   "item_id": 3,
+   "name": "Rice",
+   "unit": "kg",
+   "is_drink": false,
+   "qty": 7
+  }
+ ],
+ "stock": {
+  "reorder_count": 1,
+  "sufficient_count": 0,
+  "reorder_items": [
+   {
+    "item_id": 3,
+    "item_name": "Rice",
+    "is_drink": false,
+    "balance": 5,
+    "safety_stock": 10,
+    "status": "Re-Order"
+   }
+  ]
+ },
+ "transfers": {
+  "received": 1,
+  "with_discrepancy": 1,
+  "dispatched": 0,
+  "awaiting_confirmation": 1
+ },
+ "recent_sales": [
+  {
+   "id": 3,
+   "total": 25000,
+   "payment_method": "cash",
+   "sold_at": "2026-10-02T08:30:00Z",
+   "sold_by": "Peter",
+   "customer": null,
+   "summary": "1\u00d7 Plate"
+  },
+  {
+   "id": 2,
+   "total": 30000,
+   "payment_method": "airtel",
+   "sold_at": "2026-10-02T08:00:00Z",
+   "sold_by": "Sarah",
+   "customer": null,
+   "summary": "1\u00d7 Plate, 1\u00d7 Passion Juice"
+  },
+  {
+   "id": 1,
+   "total": 56000,
+   "payment_method": "cash",
+   "sold_at": "2026-10-02T07:00:00Z",
+   "sold_by": "Sarah",
+   "customer": null,
+   "summary": "2\u00d7 Plate, 3\u00d7 Soda"
+  }
+ ]
+}

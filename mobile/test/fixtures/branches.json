@@ -1,0 +1,273 @@
+{
+ "period": {
+  "from": "2026-09-26",
+  "to": "2026-10-02",
+  "days": 7,
+  "timezone": "Africa/Kampala"
+ },
+ "previous_period": {
+  "from": "2026-09-19",
+  "to": "2026-09-25",
+  "days": 7,
+  "timezone": "Africa/Kampala"
+ },
+ "totals": {
+  "revenue": 236000,
+  "previous_revenue": 0,
+  "change_pct": null,
+  "sales_count": 4,
+  "average_sale": 59000,
+  "plates_sold": 9,
+  "plate_revenue": 225000,
+  "drinks_sold": 4,
+  "drink_revenue": 11000
+ },
+ "daily": [
+  {
+   "date": "2026-09-26",
+   "revenue": 0,
+   "sales_count": 0,
+   "plates_sold": 0,
+   "by_store": {}
+  },
+  {
+   "date": "2026-09-27",
+   "revenue": 0,
+   "sales_count": 0,
+   "plates_sold": 0,
+   "by_store": {}
+  },
+  {
+   "date": "2026-09-28",
+   "revenue": 0,
+   "sales_count": 0,
+   "plates_sold": 0,
+   "by_store": {}
+  },
+  {
+   "date": "2026-09-29",
+   "revenue": 0,
+   "sales_count": 0,
+   "plates_sold": 0,
+   "by_store": {}
+  },
+  {
+   "date": "2026-09-30",
+   "revenue": 0,
+   "sales_count": 0,
+   "plates_sold": 0,
+   "by_store": {}
+  },
+  {
+   "date": "2026-10-01",
+   "revenue": 0,
+   "sales_count": 0,
+   "plates_sold": 0,
+   "by_store": {}
+  },
+  {
+   "date": "2026-10-02",
+   "revenue": 236000,
+   "sales_count": 4,
+   "plates_sold": 9,
+   "by_store": {
+    "2": 111000,
+    "1": 125000
+   }
+  }
+ ],
+ "hourly": [
+  {
+   "hour": 0,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 1,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 2,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 3,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 4,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 5,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 6,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 7,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 8,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 9,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 10,
+   "revenue": 56000,
+   "sales_count": 1,
+   "by_store": {
+    "2": 56000
+   }
+  },
+  {
+   "hour": 11,
+   "revenue": 180000,
+   "sales_count": 3,
+   "by_store": {
+    "2": 55000,
+    "1": 125000
+   }
+  },
+  {
+   "hour": 12,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 13,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 14,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 15,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 16,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 17,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 18,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 19,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 20,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 21,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 22,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  },
+  {
+   "hour": 23,
+   "revenue": 0,
+   "sales_count": 0,
+   "by_store": {}
+  }
+ ],
+ "branches": [
+  {
+   "store_id": 1,
+   "store_name": "Kira",
+   "is_main": true,
+   "revenue": 125000,
+   "previous_revenue": 0,
+   "change_pct": null,
+   "sales_count": 1,
+   "average_sale": 125000,
+   "plates_sold": 5,
+   "plate_revenue": 125000,
+   "drinks_sold": 0,
+   "drink_revenue": 0,
+   "share_pct": 53,
+   "by_payment_method": {
+    "cash": 125000
+   },
+   "reorder_items_count": 0,
+   "last_sale_at": "2026-10-02T08:00:00Z"
+  },
+  {
+   "store_id": 2,
+   "store_name": "Lugogo",
+   "is_main": false,
+   "revenue": 111000,
+   "previous_revenue": 0,
+   "change_pct": null,
+   "sales_count": 3,
+   "average_sale": 37000,
+   "plates_sold": 4,
+   "plate_revenue": 100000,
+   "drinks_sold": 4,
+   "drink_revenue": 11000,
+   "share_pct": 47,
+   "by_payment_method": {
+    "cash": 81000,
+    "airtel": 30000
+   },
+   "reorder_items_count": 1,
+   "last_sale_at": "2026-10-02T08:30:00Z"
+  }
+ ]
+}

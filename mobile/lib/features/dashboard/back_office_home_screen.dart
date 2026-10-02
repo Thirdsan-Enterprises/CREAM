@@ -5,6 +5,7 @@ import '../../core/api/repositories/stores_repository.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/auth/store.dart';
 import '../../core/theme/app_theme.dart';
+import '../branches/branches_screen.dart';
 import '../catering/catering_screen.dart';
 import '../customers/back_office_customers_screen.dart';
 import '../reports/reports_screen.dart';
@@ -14,6 +15,7 @@ import '../stock/stocking_screen.dart';
 import 'dashboard_screen.dart';
 
 const _sections = [
+  ('Branches', Icons.storefront_outlined, BranchesScreen()),
   ('Dashboard', Icons.dashboard_outlined, DashboardScreen()),
   ('Stocking', Icons.local_shipping_outlined, StockingScreen()),
   ('Sales', Icons.receipt_long_outlined, BackOfficeSalesScreen()),
