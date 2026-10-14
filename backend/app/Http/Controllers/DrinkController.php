@@ -6,13 +6,17 @@ use App\Models\DrinkPrice;
 use App\Models\Item;
 use App\Models\ItemStoreSetting;
 use App\Services\PricingService;
+use App\Services\StockService;
 use App\Support\StoreScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DrinkController extends Controller
 {
-    public function __construct(private readonly PricingService $pricingService) {}
+    public function __construct(
+        private readonly PricingService $pricingService,
+        private readonly StockService $stockService,
+    ) {}
 
     public function index(Request $request)
     {
@@ -23,6 +27,9 @@ class DrinkController extends Controller
         return $drinks->map(fn (Item $item) => [
             'item' => $item,
             'price' => $this->pricingService->currentDrinkPrice($item->id, $storeId),
+            // How many this branch has, so the Sell screen can show it and stop
+            // short of it. Unknown when no branch is chosen.
+            'balance' => $storeId ? $this->stockService->balance($item->id, $storeId) : null,
         ])->values();
     }
 

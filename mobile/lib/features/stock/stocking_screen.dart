@@ -5,6 +5,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/api/repositories/items_repository.dart';
 import '../../core/api/repositories/stock_repository.dart';
 import '../../core/api/repositories/stores_repository.dart';
+import '../../core/auth/auth_session.dart';
 import '../../core/auth/store.dart';
 import '../../shared/formatters/date_formatter.dart';
 import '../../shared/models/item.dart';
@@ -249,8 +250,16 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
     setState(() {
       _items = items;
       _mainStore = main;
-      _stores = stores.where((s) => s.isActive).toList();
-      _drinkStore = main;
+      final user = ref.read(authSessionProvider).user;
+      final active = stores.where((s) => s.isActive).toList();
+      // The owner can buy drinks for any branch; everyone else only for
+      // their own (the server enforces this too).
+      _stores = (user?.isAdmin ?? true)
+          ? active
+          : active.where((s) => s.id == user?.storeId).toList();
+      _drinkStore = _stores.contains(main) || _stores.isEmpty
+          ? main
+          : _stores.first;
     });
   }
 

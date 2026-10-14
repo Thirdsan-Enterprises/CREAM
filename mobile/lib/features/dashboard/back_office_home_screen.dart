@@ -9,6 +9,7 @@ import '../branches/branches_screen.dart';
 import '../catering/catering_screen.dart';
 import '../customers/back_office_customers_screen.dart';
 import '../reports/reports_screen.dart';
+import '../sales/owner_sell_screen.dart';
 import '../sales/back_office_sales_screen.dart';
 import '../settings/settings_screen.dart';
 import '../stock/stocking_screen.dart';
@@ -17,6 +18,7 @@ import 'dashboard_screen.dart';
 const _sections = [
   ('Branches', Icons.storefront_outlined, BranchesScreen()),
   ('Dashboard', Icons.dashboard_outlined, DashboardScreen()),
+  ('Sell', Icons.point_of_sale, OwnerSellScreen()),
   ('Stocking', Icons.local_shipping_outlined, StockingScreen()),
   ('Sales', Icons.receipt_long_outlined, BackOfficeSalesScreen()),
   ('Catering', Icons.celebration_outlined, CateringScreen()),

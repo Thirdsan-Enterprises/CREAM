@@ -12,6 +12,11 @@ const L = require('./lib');
   await L.settle(page, 500);
   await L.dump(page, 'cart');
   await L.shot(page, '23-sell-cart');
+  // Water has never been bought for Lugogo, so it cannot be sold
+  await page.getByRole('button', { name: /Water UGX/ }).first().click();
+  await L.settle(page, 700);
+  await L.dump(page, 'water out of stock');
+  await L.shot(page, '23b-out-of-stock');
   await L.tap(page, 'Complete sale', { exact: true, wait: 1800 });
   await L.shot(page, '24-sale-done');
   await L.dump(page, 'after sale');

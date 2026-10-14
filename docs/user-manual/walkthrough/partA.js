@@ -27,6 +27,8 @@ async function newUser(page, name, phone, password, role, store) {
   await L.tap(page, 'Create user', { exact: true, wait: 1800 });
   await newUser(page, 'Sarah Auma', '0771000002', 'lugogo-cashier', 'Cashier', 'Lugogo');
   await L.tap(page, 'Create user', { exact: true, wait: 1800 });
+  await newUser(page, 'Tom Okello', '0771000003', 'kira-storekeeper', 'Storekeeper', 'Kira (Main/Warehouse)');
+  await L.tap(page, 'Create user', { exact: true, wait: 1800 });
   await L.shot(page, '05-users-list');
 
   // Stock food at Kira

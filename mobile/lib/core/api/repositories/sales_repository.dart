@@ -12,12 +12,14 @@ class SalesRepository {
   Future<Map<String, dynamic>> createSale({
     required String paymentMethod,
     int? customerId,
+    int? storeId,
     required List<SaleLine> lines,
   }) {
     return _api.post(
       '/sales',
       data: {
         'payment_method': paymentMethod,
+        'store_id': ?storeId,
         if (customerId != null) 'customer_id': customerId,
         'lines': lines.map((l) => l.toJson()).toList(),
       },
@@ -34,7 +36,7 @@ class SalesRepository {
       query: {
         if (from != null) 'from': from.toIso8601String().split('T').first,
         if (to != null) 'to': to.toIso8601String().split('T').first,
-        if (storeId != null) 'store_id': storeId,
+        'store_id': ?storeId,
       },
     );
     return SaleSummary.fromJson(body);
@@ -51,7 +53,7 @@ class SalesRepository {
       query: {
         if (from != null) 'from': from.toIso8601String().split('T').first,
         if (to != null) 'to': to.toIso8601String().split('T').first,
-        if (storeId != null) 'store_id': storeId,
+        'store_id': ?storeId,
         if (paymentMethod != null) 'payment_method': paymentMethod,
       },
     );

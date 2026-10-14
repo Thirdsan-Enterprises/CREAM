@@ -73,8 +73,13 @@ class ClientWalkthroughTest extends TestCase
             'name' => 'Sarah', 'phone' => '0771000002', 'password' => 'lugogo-cashier',
             'role' => 'cashier', 'store_id' => $lugogo->id,
         ])->assertCreated();
+        $this->api('POST', '/api/users', [
+            'name' => 'Tom', 'phone' => '0771000003', 'password' => 'kira-storekeeper',
+            'role' => 'storekeeper', 'store_id' => $kira->id,
+        ])->assertCreated();
         $manager = $this->login('0771000001', 'lugogo-manager');
         $cashier = $this->login('0771000002', 'lugogo-cashier');
+        $keeper = $this->login('0771000003', 'kira-storekeeper');
 
         // 3. Before anything is stocked, everything is at 0 and needs re-ordering.
         $rice = $this->stockOf($kira->id, 'Rice');
@@ -157,6 +162,14 @@ class ClientWalkthroughTest extends TestCase
         $this->assertEquals(54000, $sale->json('total'));
         $this->assertEquals(22, $this->stockOf($lugogo->id, 'Soda')['balance'], 'Selling drinks deducts stock');
 
+        // ...and a drink cannot be sold beyond what the branch has.
+        $this->api('POST', '/api/sales', [
+            'payment_method' => 'cash',
+            'lines' => [['item_type' => 'drink', 'item_id' => $soda['item']['id'], 'qty' => 23]],
+        ])->assertUnprocessable()
+            ->assertJsonPath('errors.lines.0', 'Only 22 Soda in stock at Lugogo: cannot sell 23. Record the purchase first.');
+        $this->assertEquals(22, $this->stockOf($lugogo->id, 'Soda')['balance']);
+
         // 11. A prepaid customer tops up and pays by account.
         $customer = $this->api('POST', '/api/customers', [
             'name' => 'Kampala Law Chambers', 'phone' => '0772555000', 'account_type' => 'prepaid',
@@ -199,6 +212,31 @@ class ClientWalkthroughTest extends TestCase
             ->keyBy('store_name');
         $this->assertEquals(129000, $branches['Lugogo']['revenue']);
         $this->assertEquals(0, $branches['Town']['revenue']);
+
+        // 13b. The storekeeper at Kira buys food and sends it on (the same
+        //      screens the owner uses), but cannot sell.
+        $town = Store::where('code', 'TOWN')->firstOrFail();
+        $matooke = $this->stockOf($kira->id, 'Matooke');
+        $this->actAs($keeper);
+        $this->api('POST', '/api/stock/purchase', ['item_id' => $matooke['item_id'], 'qty' => 30])->assertCreated();
+        $this->api('POST', '/api/transfers', [
+            'to_store_id' => $town->id, 'items' => [['item_id' => $matooke['item_id'], 'qty' => 10]],
+        ])->assertCreated();
+        $this->assertEquals(20, $this->stockOf($kira->id, 'Matooke')['balance']);
+        $this->api('POST', '/api/sales', ['payment_method' => 'cash', 'lines' => [['item_type' => 'plate', 'qty' => 1]]])
+            ->assertForbidden();
+
+        // 13c. The owner can ring up a sale for a branch.
+        $this->actAs($owner);
+        $this->api('POST', '/api/sales', [
+            'store_id' => $town->id, 'payment_method' => 'cash', 'lines' => [['item_type' => 'plate', 'qty' => 1]],
+        ])->assertCreated();
+        $townDrinks = collect($this->api('GET', "/api/drinks?store_id={$town->id}")->json());
+        $this->assertEquals(0, $townDrinks->first()['balance'], 'Town has no drinks recorded yet');
+        $this->api('POST', '/api/sales', [
+            'store_id' => $town->id, 'payment_method' => 'cash',
+            'lines' => [['item_type' => 'drink', 'item_id' => $soda['item']['id'], 'qty' => 1]],
+        ])->assertUnprocessable();
 
         // 14. Adding a new branch gives it the full item list at once.
         $ntinda = $this->api('POST', '/api/stores', ['name' => 'Ntinda', 'code' => 'NTINDA']);

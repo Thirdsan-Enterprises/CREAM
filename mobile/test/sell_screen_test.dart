@@ -38,6 +38,7 @@ double _contrast(Color a, Color b) {
 }
 
 void main() {
+  sellStockTests();
   testWidgets('a drink stays readable once it has been added to the sale', (
     tester,
   ) async {
@@ -77,5 +78,86 @@ void main() {
     }
     expect(find.text('Total'), findsOneWidget);
     expect(find.text('UGX 27,000'), findsOneWidget, reason: 'plate + 1 soda');
+  });
+}
+
+class _FakeItemsWithStock extends ItemsRepository {
+  _FakeItemsWithStock(this.stock) : super(ApiClient());
+
+  final double stock;
+
+  @override
+  Future<double> platePrice({int? storeId}) async => 25000;
+
+  @override
+  Future<List<Drink>> drinks({int? storeId}) async => [
+    Drink(
+      item: Item(
+        id: 7,
+        name: 'Soda',
+        unit: 'bottle',
+        category: null,
+        isDrink: true,
+        isActive: true,
+      ),
+      price: 2000,
+      balance: stock,
+    ),
+  ];
+}
+
+Future<void> _pumpSell(WidgetTester tester, double stock) async {
+  tester.view.physicalSize = const Size(1200, 2000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        itemsRepositoryProvider.overrideWithValue(_FakeItemsWithStock(stock)),
+      ],
+      child: MaterialApp(
+        theme: AppTheme.outletTerminal(),
+        home: const Scaffold(body: SellScreen()),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+void sellStockTests() {
+  testWidgets('a drink tile says how many are left', (tester) async {
+    await _pumpSell(tester, 3);
+    expect(find.text('3 left'), findsOneWidget);
+  });
+
+  testWidgets('a drink cannot be added beyond what is in stock', (
+    tester,
+  ) async {
+    await _pumpSell(tester, 1);
+
+    await tester.tap(find.text('Soda'));
+    await tester.pumpAndSettle();
+    expect(find.text('UGX 27,000'), findsOneWidget, reason: 'plate + 1 soda');
+
+    await tester.tap(find.text('Soda'));
+    await tester.pumpAndSettle();
+    expect(find.text('Only 1 Soda in stock.'), findsOneWidget);
+    expect(find.text('UGX 27,000'), findsOneWidget, reason: 'still one soda');
+  });
+
+  testWidgets('a drink with none in stock says so and cannot be added', (
+    tester,
+  ) async {
+    await _pumpSell(tester, 0);
+    expect(find.text('Out of stock'), findsOneWidget);
+
+    await tester.tap(find.text('Soda'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Soda is out of stock. Record the purchase first.'),
+      findsOneWidget,
+    );
+    expect(find.text('UGX 25,000'), findsWidgets);
+    expect(find.text('UGX 27,000'), findsNothing);
   });
 }

@@ -136,10 +136,10 @@ parts.append(
 <h4>Who does what</h4>
 <table>
 <tr><th>Role</th><th>Sees</th><th>Can do</th></tr>
-<tr><td><b>Owner</b> (admin)</td><td>All branches</td><td>Everything: set up staff, branches, items and prices; buy and transfer stock; watch every branch. The owner's menu has no Sell screen.</td></tr>
+<tr><td><b>Owner</b> (admin)</td><td>All branches</td><td>Everything: set up staff, branches, items and prices; buy and transfer stock; sell for any branch; watch every branch.</td></tr>
 <tr><td><b>Store manager</b></td><td>Own branch</td><td>Sell, confirm deliveries, buy the branch's drinks, record stock used, take deposits, see the branch's report.</td></tr>
 <tr><td><b>Cashier</b></td><td>Own branch</td><td>Sell, take deposits, see stock and "My Day". Cannot change prices or stock levels.</td></tr>
-<tr><td><b>Storekeeper</b></td><td>Own branch</td><td>Uses the same screens as a cashier. Buying food and sending transfers are done by the owner.</td></tr>
+<tr><td><b>Storekeeper</b></td><td>Kira</td><td>Works at Kira. Sees <b>Stocking</b> (buy food, send it to the branches) and <b>Stock</b>. Does not sell.</td></tr>
 </table>
 <p class="foot">Menu names, buttons and messages are shown in <span class="ui">this style</span> exactly as they appear on screen.</p>
 """
@@ -173,7 +173,7 @@ parts.append(
         """<ol><li>Open the Cream app.</li>
 <li>Type your <span class="ui">Phone number</span> and <span class="ui">Password</span>.</li>
 <li>Tap <span class="ui">Sign in</span>.</li></ol>
-<p>The owner lands on <span class="ui">Branches</span>. Managers and cashiers land on <span class="ui">Sell</span> for their own branch.</p>
+<p>The owner lands on <span class="ui">Branches</span>. Managers and cashiers land on <span class="ui">Sell</span> for their own branch. A storekeeper lands on <span class="ui">Stocking</span>.</p>
 <p>To sign out, tap the arrow icon at the top right.</p>""",
         ("01-sign-in", "The sign-in screen."),
         ("02-owner-home", "What the owner sees after signing in."),
@@ -219,7 +219,7 @@ parts.append(
 parts.append(
     box(
         "tip",
-        "The owner account cannot ring up sales. Sales are recorded by the cashier or manager of a branch, so the sales are tied to that branch and that person. To try the system, create a cashier account and sign in with it.",
+        "The owner can sell for any branch (5.4), but give every cashier and manager their own account too. Each sale is recorded against the person who rang it up, which is what makes the staff report in chapter 8 useful.",
     )
 )
 parts.append(
@@ -260,17 +260,27 @@ parts.append("</div>")
 parts.append('<div class="chapter"><h2>3. Stocking: how stock moves</h2>')
 parts.append(
     """<div class="flow">
-<div><b>1. Buy</b>The owner records food bought at <b>Kira</b>.</div><span>&rarr;</span>
-<div><b>2. Send</b>The owner sends items from Kira to Lugogo or Town with a <b>Transfer</b>. Kira's stock drops at once.</div><span>&rarr;</span>
+<div><b>1. Buy</b>The owner or the storekeeper records food bought at <b>Kira</b>.</div><span>&rarr;</span>
+<div><b>2. Send</b>The owner or storekeeper sends items from Kira to Lugogo or Town with a <b>Transfer</b>. Kira's stock drops at once.</div><span>&rarr;</span>
 <div><b>3. Confirm</b>The branch manager confirms what actually arrived. Only then does it count at the branch.</div>
 </div>
 <p><b>Drinks are different.</b> Each branch buys its own drinks, so the branch (or the owner on its behalf) records the purchase directly. Nothing is sent from Kira.</p>
-<p><b>Using stock.</b> Selling a drink takes it off the branch's stock automatically. For food, the manager records what the kitchen used (3.7).</p>"""
+<p><b>Using stock.</b> Selling a drink takes it off the branch's stock automatically, and a drink cannot be sold once the branch has none. For food, the manager records what the kitchen used (3.7).</p>"""
+)
+parts.append(
+    step(
+        "The storekeeper's screens",
+        "Storekeeper",
+        """<p>A storekeeper signs in to two tabs only: <span class="ui">Stocking</span> and <span class="ui">Stock</span>. The steps in 3.1 to 3.3 are done from <span class="ui">Stocking</span> exactly as the owner does them. There is no Sell tab, because a storekeeper does not sell.</p>
+<p>The owner reaches the same screens from the menu: <span class="ui">Stocking</span>.</p>""",
+        ("41-storekeeper-home", "The storekeeper's first screen."),
+        ("42-storekeeper-transfer", "Sending Matooke to Town."),
+    )
 )
 parts.append(
     step(
         "3.1 Buy food at Kira",
-        "Owner",
+        "Owner · Storekeeper",
         """<ol><li>Open <span class="ui">Stocking</span> &rarr; <span class="ui">Purchase</span>.</li>
 <li>Tap the <span class="ui">Item</span> box, type a few letters (for example <b>Ri</b>) and tap <b>Rice</b>.</li>
 <li>Type the <span class="ui">Quantity purchased</span>, for example 100.</li>
@@ -284,7 +294,7 @@ parts.append(
 parts.append(
     step(
         "3.2 Add an item that is not on the list",
-        "Owner",
+        "Owner · Storekeeper",
         """<ol><li>In <span class="ui">Purchase</span>, tap the <span class="ui">Item</span> box and tap <span class="ui">Add a new item</span>.</li>
 <li>Type the <span class="ui">Item name</span>, its unit (kg, litre, piece) and, if you like, the <span class="ui">Re-order level</span>.</li>
 <li>Tap <span class="ui">Add item</span>, then record the purchase as in 3.1.</li></ol>
@@ -296,7 +306,7 @@ parts.append(
 parts.append(
     step(
         "3.3 Send stock to a branch",
-        "Owner",
+        "Owner · Storekeeper",
         """<ol><li><span class="ui">Stocking</span> &rarr; <span class="ui">Transfer</span>.</li>
 <li>Choose <span class="ui">To branch</span>.</li>
 <li>Choose an <span class="ui">Item</span>; the list shows only what Kira has, with the amount available. Type the <span class="ui">Qty</span>.</li>
@@ -385,8 +395,8 @@ parts.append(
         "Cashier · Store manager",
         """<ol><li>Open <span class="ui">Sell</span>. The plate price is at the top.</li>
 <li>Use <span class="ui">+</span> and <span class="ui">&minus;</span> to set the number of plates.</li>
-<li>Tap a drink to add one. Tap it again for each extra. The number on its corner shows how many. Tap the number to take one away.</li>
-<li>Check the <span class="ui">Total</span>.</li>
+<li>Tap a drink to add one. Tap it again for each extra. The number on its corner shows how many. Tap the number to take one away. Under each drink the screen shows how many are <b>left</b> at your branch.</li>
+<li>Check the <span class="ui">Total</span>. It and the <span class="ui">Complete sale</span> button stay at the bottom of the screen while you scroll.</li>
 <li>Choose the <span class="ui">Payment method</span> (see the table below).</li>
 <li>Tap <span class="ui">Complete sale</span>. <i>Sale completed.</i> confirms it.</li></ol>
 <p>The screen resets to one plate for the next customer. A sale can be plates only, drinks only, or both.</p>""",
@@ -418,9 +428,25 @@ parts.append(
     )
 )
 parts.append(
-    box(
-        "note",
-        "A drink can still be sold when the app shows none in stock. The drink's balance then goes below zero (for example -3) and it shows Re-Order until the purchase is recorded. If you see negative numbers, record the missing purchase (3.5).",
+    step(
+        "5.3 A drink with none in stock cannot be sold",
+        "Cashier · Store manager · Owner",
+        """<p>A drink can only be sold while your branch has it. A drink with none shows <b>Out of stock</b>, and tapping it says <i>Water is out of stock. Record the purchase first.</i> If you ask for more than is left, the app says <i>Only 3 Soda in stock.</i></p>
+<p>The fix is always the same: record the purchase (3.5), then sell. Plates do not need stock recorded; only drinks do.</p>""",
+        ("23b-out-of-stock", "Water has none recorded; Soda has 24."),
+    )
+)
+parts.append(
+    step(
+        "5.4 Sell as the owner",
+        "Owner",
+        """<ol><li>Open the menu and tap <span class="ui">Sell</span>.</li>
+<li>Under <span class="ui">Selling for</span>, choose the branch.</li>
+<li>Build the sale and tap <span class="ui">Complete sale</span> exactly as in 5.1.</li></ol>
+<p>The sale, its drink stock and its takings belong to the branch you chose, and your name is recorded as the seller. Choose the branch before you start; switching branches clears the sale.</p>""",
+        ("43-owner-pick-branch", "Choosing the branch."),
+        ("44-owner-sell", "Selling for Town."),
+        ("45-owner-sale-done", "Sale completed."),
     )
 )
 parts.append("</div>")
@@ -531,7 +557,11 @@ faq = [
     ),
     (
         "I cannot sell.",
-        "The owner's menu has no Sell screen. Sign in as a cashier or store manager. The owner can make one in Settings &rarr; Users (2.1). If a cashier cannot sell, check that the plate price and drink prices exist and that the phone has a connection.",
+        "Plates can always be sold. A drink can only be sold while the branch has it in stock: look for <b>Out of stock</b> under the drink, and record the purchase first (3.5). The owner sells from the menu: <span class=\"ui\">Sell</span>, then choose the branch (5.4). A storekeeper does not sell. If nothing loads, check the phone's connection.",
+    ),
+    (
+        "It says &ldquo;Only 3 Soda in stock&rdquo; when I sell.",
+        "The branch has fewer than you are selling. Count what is on the shelf; if the shelf has more, a purchase was not recorded. Record it (3.5), then sell. If the shelf really has fewer, sell fewer.",
     ),
     (
         "An item I need is missing from a list.",
@@ -570,14 +600,14 @@ parts.append('<div class="chapter"><h2>10. Quick reference</h2>')
 parts.append(
     """<table>
 <tr><th>I want to&hellip;</th><th>Who</th><th>Go to</th></tr>
-<tr><td>Buy food at Kira</td><td>Owner</td><td>Stocking &rarr; Purchase</td></tr>
-<tr><td>Add a new item</td><td>Owner</td><td>Stocking &rarr; Purchase &rarr; Item &rarr; Add a new item</td></tr>
-<tr><td>Send stock to a branch</td><td>Owner</td><td>Stocking &rarr; Transfer</td></tr>
+<tr><td>Buy food at Kira</td><td>Owner, storekeeper</td><td>Stocking &rarr; Purchase</td></tr>
+<tr><td>Add a new item</td><td>Owner, storekeeper</td><td>Stocking &rarr; Purchase &rarr; Item &rarr; Add a new item</td></tr>
+<tr><td>Send stock to a branch</td><td>Owner, storekeeper</td><td>Stocking &rarr; Transfer</td></tr>
 <tr><td>Confirm a delivery</td><td>Store manager</td><td>Stock &rarr; Incoming Transfers</td></tr>
 <tr><td>Buy drinks for a branch</td><td>Manager, owner</td><td>Stock &rarr; Balances &rarr; cart icon (owner: Stocking &rarr; Purchase)</td></tr>
 <tr><td>Record what was used</td><td>Manager, cashier</td><td>Stock &rarr; Balances &rarr; tap the item</td></tr>
 <tr><td>See what needs re-ordering</td><td>Everyone</td><td>Stock &rarr; Re-Order only (owner: Dashboard)</td></tr>
-<tr><td>Ring up a sale</td><td>Cashier, manager</td><td>Sell</td></tr>
+<tr><td>Ring up a sale</td><td>Cashier, manager, owner</td><td>Sell (owner: choose the branch first)</td></tr>
 <tr><td>Take a deposit</td><td>Cashier, manager</td><td>Accounts &rarr; customer</td></tr>
 <tr><td>Create a customer account</td><td>Owner</td><td>Customers &rarr; New customer</td></tr>
 <tr><td>Check today's takings at my branch</td><td>Cashier, manager</td><td>My Day</td></tr>
@@ -588,7 +618,7 @@ parts.append(
 <tr><td>Add a branch</td><td>Owner</td><td>Settings &rarr; Branches &rarr; New branch</td></tr>
 </table>
 <h4>How this manual was checked</h4>
-<p class="foot">The steps above were run, in order, through the real Cream app on a new system: setting up staff, buying at Kira, adding an item, sending a transfer, confirming it with a shortfall, buying drinks at a branch, recording use, selling for cash and on account, taking a deposit, changing the plate price, resetting a password, adding a branch, and reading the owner's reports. The same journey also runs as an automated test on the server, so the system's rules (stock, transfers, prices, account limits) are checked on every change.</p>
+<p class="foot">The steps above were run, in order, through the real Cream app on a new system: setting up staff (including a storekeeper), buying at Kira, adding an item, sending a transfer, confirming it with a shortfall, buying drinks at a branch, recording use, selling for cash and on account, the stock limit on drinks, selling as the owner, taking a deposit, changing the plate price, resetting a password, adding a branch, and reading the owner's reports. The same journey also runs as an automated test on the server, so the system's rules (stock, transfers, prices, account limits) are checked on every change.</p>
 <p class="foot">Lists in the app show up to 500 items, users and customers, and up to 100 of the latest sales, movements and transfers.</p>"""
 )
 parts.append("</div>")
