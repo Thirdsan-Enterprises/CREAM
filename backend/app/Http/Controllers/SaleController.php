@@ -45,7 +45,7 @@ class SaleController extends Controller
             $query->where('sold_at', '<=', $request->date('to')->endOfDay());
         }
 
-        return $query->paginate();
+        return $query->paginate($this->perPage($request));
     }
 
     public function store(Request $request)

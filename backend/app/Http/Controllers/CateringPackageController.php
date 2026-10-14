@@ -7,9 +7,9 @@ use Illuminate\Http\Request;
 
 class CateringPackageController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return CateringPackage::query()->orderBy('price_per_plate')->paginate();
+        return CateringPackage::query()->orderBy('price_per_plate')->paginate($this->perPage($request, 500));
     }
 
     public function store(Request $request)

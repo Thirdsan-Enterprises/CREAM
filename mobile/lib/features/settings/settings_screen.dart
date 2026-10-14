@@ -12,6 +12,16 @@ import '../../shared/models/item.dart';
 
 const _roles = ['admin', 'store_manager', 'cashier', 'storekeeper'];
 
+/// What each role is called on screen. The codes are for the server.
+const _roleLabels = {
+  'admin': 'Owner (admin)',
+  'store_manager': 'Store manager',
+  'cashier': 'Cashier',
+  'storekeeper': 'Storekeeper',
+};
+
+String _roleLabel(String role) => _roleLabels[role] ?? role;
+
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -25,7 +35,7 @@ class SettingsScreen extends StatelessWidget {
             color: Theme.of(context).scaffoldBackgroundColor,
             child: const TabBar(
               tabs: [
-                Tab(text: 'Stores'),
+                Tab(text: 'Branches'),
                 Tab(text: 'Users'),
                 Tab(text: 'Items'),
                 Tab(text: 'Plate price'),
@@ -74,7 +84,7 @@ class _StoresTabState extends ConsumerState<_StoresTab> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('New store'),
+        title: const Text('New branch'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -150,9 +160,10 @@ class _StoresTabState extends ConsumerState<_StoresTab> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _createStore,
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add),
+        label: const Text('New branch'),
       ),
     );
   }
@@ -218,7 +229,7 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
                 child: ListTile(
                   title: Text(isYou ? '${user.name} (you)' : user.name),
                   subtitle: Text(
-                    '${user.phone} — ${user.role}${user.store != null ? ' — ${user.store!.name}' : ''}',
+                    '${user.phone} — ${_roleLabel(user.role)}${user.store != null ? ' — ${user.store!.name}' : ''}',
                   ),
                   onTap: () => _editUser(user),
                   trailing: Switch(
@@ -236,9 +247,10 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _createUser,
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add),
+        label: const Text('New user'),
       ),
     );
   }
@@ -285,7 +297,9 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
     if (_passwordController.text.isNotEmpty &&
         _passwordController.text.length < 8) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password must be at least 8 characters.')),
+        const SnackBar(
+          content: Text('Password must be at least 8 characters.'),
+        ),
       );
       return;
     }
@@ -358,7 +372,10 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
                 decoration: const InputDecoration(labelText: 'Role'),
                 items: [
                   for (final role in _roles)
-                    DropdownMenuItem(value: role, child: Text(role)),
+                    DropdownMenuItem(
+                      value: role,
+                      child: Text(_roleLabel(role)),
+                    ),
                 ],
                 onChanged: (value) => setState(() => _role = value!),
               ),
@@ -368,7 +385,7 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
                   initialValue: stores
                       .where((s) => s.id == _store?.id)
                       .firstOrNull,
-                  decoration: const InputDecoration(labelText: 'Store'),
+                  decoration: const InputDecoration(labelText: 'Branch'),
                   items: [
                     for (final store in stores)
                       DropdownMenuItem(value: store, child: Text(store.name)),
@@ -490,7 +507,10 @@ class _NewUserSheetState extends ConsumerState<_NewUserSheet> {
                 decoration: const InputDecoration(labelText: 'Role'),
                 items: [
                   for (final role in _roles)
-                    DropdownMenuItem(value: role, child: Text(role)),
+                    DropdownMenuItem(
+                      value: role,
+                      child: Text(_roleLabel(role)),
+                    ),
                 ],
                 onChanged: (value) => setState(() => _role = value!),
               ),
@@ -498,7 +518,7 @@ class _NewUserSheetState extends ConsumerState<_NewUserSheet> {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<Store>(
                   initialValue: _store,
-                  decoration: const InputDecoration(labelText: 'Store'),
+                  decoration: const InputDecoration(labelText: 'Branch'),
                   items: [
                     for (final store in stores)
                       DropdownMenuItem(value: store, child: Text(store.name)),
@@ -602,13 +622,13 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text('Safety stock — ${item.name}'),
+          title: Text('Re-order level — ${item.name}'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<Store>(
                 initialValue: selectedStore,
-                decoration: const InputDecoration(labelText: 'Store'),
+                decoration: const InputDecoration(labelText: 'Branch'),
                 items: [
                   for (final store in stores)
                     DropdownMenuItem(value: store, child: Text(store.name)),
@@ -619,7 +639,11 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
               TextField(
                 controller: controller,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Safety stock'),
+                decoration: const InputDecoration(
+                  labelText: 'Re-order level',
+                  helperText:
+                      'Shows "Re-Order" when stock is at or below this.',
+                ),
               ),
             ],
           ),
@@ -652,7 +676,7 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Safety stock updated.')));
+    ).showSnackBar(const SnackBar(content: Text('Re-order level updated.')));
   }
 
   @override
@@ -677,7 +701,7 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
                   subtitle: Text(item.unit),
                   trailing: TextButton(
                     onPressed: () => _setSafetyStock(item),
-                    child: const Text('Safety stock'),
+                    child: const Text('Re-order level'),
                   ),
                 ),
               );
@@ -685,9 +709,10 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _createItem,
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add),
+        label: const Text('New item'),
       ),
     );
   }

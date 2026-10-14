@@ -23,11 +23,27 @@ class _OutletHomeScreenState extends ConsumerState<OutletHomeScreen> {
   int _tabIndex = 0;
 
   static const _titles = ['Sell', 'Stock', 'Accounts', 'My Day'];
-  static const _tabs = [
-    SellScreen(),
-    StockScreen(),
-    AccountsScreen(),
-    MyDayScreen(),
+
+  /// Bumped each time a tab is opened. Stock, Accounts and My Day are
+  /// rebuilt on every visit so they show the current figures instead of
+  /// whatever was true when the app started. Sell is never rebuilt, so a
+  /// half-built order survives a trip to another tab.
+  final _visits = [0, 0, 0, 0];
+
+  List<Widget> _tabs() => [
+    const SellScreen(),
+    KeyedSubtree(
+      key: ValueKey('stock-${_visits[1]}'),
+      child: const StockScreen(),
+    ),
+    KeyedSubtree(
+      key: ValueKey('accounts-${_visits[2]}'),
+      child: const AccountsScreen(),
+    ),
+    KeyedSubtree(
+      key: ValueKey('day-${_visits[3]}'),
+      child: const MyDayScreen(),
+    ),
   ];
 
   @override
@@ -61,10 +77,13 @@ class _OutletHomeScreenState extends ConsumerState<OutletHomeScreen> {
             ),
           ],
         ),
-        body: IndexedStack(index: _tabIndex, children: _tabs),
+        body: IndexedStack(index: _tabIndex, children: _tabs()),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tabIndex,
-          onDestinationSelected: (index) => setState(() => _tabIndex = index),
+          onDestinationSelected: (index) => setState(() {
+            _tabIndex = index;
+            _visits[index]++;
+          }),
           destinations: const [
             NavigationDestination(
               icon: Icon(Icons.point_of_sale),

@@ -45,7 +45,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             padding: const EdgeInsets.all(20),
             children: [
               Text(
-                'Today, all stores',
+                'Today, all branches',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 12),
@@ -73,27 +73,49 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'Low stock alerts',
+                data.lowStockAlerts.isEmpty
+                    ? 'Low stock alerts'
+                    : 'Low stock alerts (${data.lowStockAlerts.length})',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
+              if (data.lowStockAlerts.isNotEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Text(
+                    'An item shows here when a branch\'s stock is at or below its re-order level. Buy it at Kira or transfer it from Kira.',
+                  ),
+                ),
               const SizedBox(height: 8),
               if (data.lowStockAlerts.isEmpty)
                 const Text('No items need re-ordering right now.'),
-              for (final alert in data.lowStockAlerts)
+              for (final group in _alertsByBranch(data.lowStockAlerts))
                 Card(
-                  child: ListTile(
-                    title: Text(alert.itemName),
+                  child: ExpansionTile(
+                    shape: const Border(),
+                    collapsedShape: const Border(),
+                    title: Text(group.storeName),
                     subtitle: Text(
-                      '${alert.storeName} — balance ${alert.balance.toStringAsFixed(0)}',
+                      '${group.alerts.length} to re-order · ${group.alerts.where((a) => a.balance <= 0).length} out of stock',
                     ),
-                    trailing: const Chip(
-                      label: Text('Re-Order'),
-                      backgroundColor: AppColors.danger,
-                      labelStyle: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    children: [
+                      for (final alert in group.alerts)
+                        ListTile(
+                          dense: true,
+                          title: Text(alert.itemName),
+                          subtitle: Text(
+                            '${alert.balance.toStringAsFixed(0)} in stock, re-order level ${alert.safetyStock.toStringAsFixed(0)}',
+                          ),
+                          trailing: Text(
+                            alert.balance <= 0 ? 'Out' : 'Low',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: alert.balance <= 0
+                                  ? AppColors.danger
+                                  : AppColors.gold,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               const SizedBox(height: 24),
@@ -121,6 +143,34 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       },
     );
   }
+}
+
+class _BranchAlerts {
+  _BranchAlerts(this.storeName, this.alerts);
+
+  final String storeName;
+  final List<LowStockAlert> alerts;
+}
+
+/// One group per branch, the most depleted items first, so the owner sees
+/// "Kira: 22 to re-order" instead of a wall of every item at every branch.
+List<_BranchAlerts> _alertsByBranch(List<LowStockAlert> alerts) {
+  final byStore = <int, _BranchAlerts>{};
+  for (final alert in alerts) {
+    byStore
+        .putIfAbsent(
+          alert.storeId,
+          () => _BranchAlerts(alert.storeName, <LowStockAlert>[]),
+        )
+        .alerts
+        .add(alert);
+  }
+  final groups = byStore.values.toList();
+  for (final group in groups) {
+    group.alerts.sort((a, b) => a.balance.compareTo(b.balance));
+  }
+  groups.sort((a, b) => b.alerts.length.compareTo(a.alerts.length));
+  return groups;
 }
 
 class _StatCard extends StatelessWidget {

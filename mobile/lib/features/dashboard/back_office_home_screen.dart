@@ -36,6 +36,9 @@ class BackOfficeHomeScreen extends ConsumerStatefulWidget {
 class _BackOfficeHomeScreenState extends ConsumerState<BackOfficeHomeScreen> {
   int _sectionIndex = 0;
 
+  /// Bumped on every pick from the menu, even of the section already open.
+  int _visits = 0;
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authSessionProvider).user;
@@ -56,7 +59,10 @@ class _BackOfficeHomeScreenState extends ConsumerState<BackOfficeHomeScreen> {
         drawer: NavigationDrawer(
           selectedIndex: _sectionIndex,
           onDestinationSelected: (index) {
-            setState(() => _sectionIndex = index);
+            setState(() {
+              _sectionIndex = index;
+              _visits++;
+            });
             Navigator.of(context).pop();
           },
           children: [
@@ -80,9 +86,12 @@ class _BackOfficeHomeScreenState extends ConsumerState<BackOfficeHomeScreen> {
               ),
           ],
         ),
-        body: IndexedStack(
-          index: _sectionIndex,
-          children: [for (final section in _sections) section.$3],
+        // Only the open section is built, so every visit starts with fresh
+        // figures. An IndexedStack kept all of them alive from app start, so
+        // the Dashboard still said "Re-Order" after stock had been bought.
+        body: KeyedSubtree(
+          key: ValueKey('section-$_sectionIndex-$_visits'),
+          child: _sections[_sectionIndex].$3,
         ),
       ),
     );
@@ -103,12 +112,12 @@ class _StoreSwitcher extends ConsumerWidget {
 
         return PopupMenuButton<int?>(
           icon: const Icon(Icons.storefront_outlined),
-          tooltip: 'Switch store',
+          tooltip: 'Switch branch',
           initialValue: selectedStoreId,
           onSelected: (value) =>
               ref.read(selectedStoreIdProvider.notifier).state = value,
           itemBuilder: (context) => [
-            const PopupMenuItem(value: null, child: Text('All stores')),
+            const PopupMenuItem(value: null, child: Text('All branches')),
             for (final store in stores)
               PopupMenuItem(value: store.id, child: Text(store.name)),
           ],

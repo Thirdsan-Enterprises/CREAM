@@ -36,6 +36,10 @@ String compactUgx(num value) => _compact.format(value);
 String qty(num value) =>
     value == value.roundToDouble() ? _plain.format(value) : value.toString();
 
+/// "1 sale" / "3 sales".
+String salesCount(num count) =>
+    '${qty(count)} ${count == 1 ? 'sale' : 'sales'}';
+
 class PeriodSelector extends StatelessWidget {
   const PeriodSelector({
     super.key,

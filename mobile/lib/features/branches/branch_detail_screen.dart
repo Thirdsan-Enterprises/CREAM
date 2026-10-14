@@ -197,7 +197,7 @@ class _BranchDetailScreenState extends ConsumerState<BranchDetailScreen> {
                   for (final method in data.paymentMethods) ...[
                     _AmountRow(
                       title: paymentLabels[method.name] ?? method.name,
-                      subtitle: '${qty(method.count)} sales',
+                      subtitle: salesCount(method.count),
                       amount: method.revenue,
                       fraction: totals.revenue > 0
                           ? method.revenue / totals.revenue
@@ -219,7 +219,7 @@ class _BranchDetailScreenState extends ConsumerState<BranchDetailScreen> {
                     _AmountRow(
                       title: cashier.name,
                       subtitle:
-                          '${qty(cashier.count)} sales · ${qty(cashier.extra)} plates',
+                          '${salesCount(cashier.count)} · ${qty(cashier.extra)} ${cashier.extra == 1 ? 'plate' : 'plates'}',
                       amount: cashier.revenue,
                       fraction: totals.revenue > 0
                           ? cashier.revenue / totals.revenue

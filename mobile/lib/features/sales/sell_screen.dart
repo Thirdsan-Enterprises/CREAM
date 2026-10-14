@@ -297,6 +297,7 @@ class _SellScreenState extends ConsumerState<SellScreen> {
                         onPressed: _plateQty > 0
                             ? () => setState(() => _plateQty--)
                             : null,
+                        tooltip: 'One fewer plate',
                         icon: const Icon(Icons.remove),
                       ),
                       SizedBox(
@@ -309,6 +310,7 @@ class _SellScreenState extends ConsumerState<SellScreen> {
                       ),
                       IconButton.filledTonal(
                         onPressed: () => setState(() => _plateQty++),
+                        tooltip: 'One more plate',
                         icon: const Icon(Icons.add),
                       ),
                     ],
@@ -456,6 +458,11 @@ class _DrinkTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final selected = qty > 0;
     final colorScheme = Theme.of(context).colorScheme;
+    // A selected tile is filled dark, so its text must turn light, or the
+    // drink's name and price vanish the moment it is tapped.
+    final textColor = selected
+        ? colorScheme.onPrimaryContainer
+        : colorScheme.onSurface;
 
     return Material(
       color: selected
@@ -472,19 +479,23 @@ class _DrinkTile extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.local_drink_outlined, size: 28),
+                  Icon(Icons.local_drink_outlined, size: 28, color: textColor),
                   const SizedBox(height: 8),
                   Text(
                     drink.item.name,
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelLarge,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelLarge?.copyWith(color: textColor),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     CurrencyFormatter.format(drink.price ?? 0),
-                    style: Theme.of(context).textTheme.bodySmall,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: textColor),
                   ),
                 ],
               ),

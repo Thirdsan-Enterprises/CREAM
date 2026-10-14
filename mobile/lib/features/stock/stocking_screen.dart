@@ -28,6 +28,7 @@ final _addNewItemSentinel = Item(
 Future<Item?> _promptCreateItem(BuildContext context, WidgetRef ref) async {
   final nameController = TextEditingController();
   final unitController = TextEditingController(text: 'kg');
+  final levelController = TextEditingController();
 
   final confirmed = await showDialog<bool>(
     context: context,
@@ -46,6 +47,17 @@ Future<Item?> _promptCreateItem(BuildContext context, WidgetRef ref) async {
             controller: unitController,
             decoration: const InputDecoration(
               labelText: 'Unit (kg, litre, piece, bottle...)',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: levelController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Re-order level (optional)',
+              helperText:
+                  'Shows "Re-Order" when stock falls to this amount or below.',
+              helperMaxLines: 2,
             ),
           ),
         ],
@@ -75,6 +87,7 @@ Future<Item?> _promptCreateItem(BuildContext context, WidgetRef ref) async {
         .createItem(
           name: nameController.text.trim(),
           unit: unitController.text.trim(),
+          safetyStock: double.tryParse(levelController.text.trim()),
         );
   } catch (e) {
     if (!context.mounted) return null;
@@ -85,6 +98,94 @@ Future<Item?> _promptCreateItem(BuildContext context, WidgetRef ref) async {
     return null;
   }
 }
+
+/// Search-as-you-type item chooser. A dropdown of every food and drink in
+/// the business is a long scroll with no way to jump to "Rice".
+Future<Item?> _chooseItem(BuildContext context, List<Item> items) {
+  return showModalBottomSheet<Item>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (context) => _ItemPickerSheet(items: items),
+  );
+}
+
+class _ItemPickerSheet extends StatefulWidget {
+  const _ItemPickerSheet({required this.items});
+
+  final List<Item> items;
+
+  @override
+  State<_ItemPickerSheet> createState() => _ItemPickerSheetState();
+}
+
+class _ItemPickerSheetState extends State<_ItemPickerSheet> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _query.trim().toLowerCase();
+    final matches = [
+      for (final item in widget.items)
+        if (query.isEmpty || item.name.toLowerCase().contains(query)) item,
+    ];
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.7,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: TextField(
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Search items',
+                  prefixIcon: Icon(Icons.search),
+                ),
+                onChanged: (value) => setState(() => _query = value),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.add_circle_outline),
+              title: const Text('Add a new item'),
+              onTap: () => Navigator.of(context).pop(_addNewItemSentinel),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: matches.isEmpty
+                  ? const Center(child: Text('No item with that name.'))
+                  : ListView.builder(
+                      itemCount: matches.length,
+                      itemBuilder: (context, index) {
+                        final item = matches[index];
+                        return ListTile(
+                          title: Text(item.name),
+                          subtitle: Text(
+                            item.isDrink ? 'Drink · ${item.unit}' : item.unit,
+                          ),
+                          onTap: () => Navigator.of(context).pop(item),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// What a stock movement is called on screen. The codes are for the server.
+String _movementLabel(String type) => switch (type) {
+  'purchase' => 'Bought',
+  'transfer_out' => 'Sent to a branch',
+  'transfer_in' => 'Received from Kira',
+  'consumption' => 'Used / sold',
+  'adjustment' => 'Corrected',
+  _ => type,
+};
 
 class StockingScreen extends StatelessWidget {
   const StockingScreen({super.key});
@@ -127,6 +228,8 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
   late Future<void> _future;
   List<Item> _items = [];
   Store? _mainStore;
+  List<Store> _stores = [];
+  Store? _drinkStore;
   Item? _selectedItem;
   final _qtyController = TextEditingController();
   final _noteController = TextEditingController();
@@ -146,6 +249,8 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
     setState(() {
       _items = items;
       _mainStore = main;
+      _stores = stores.where((s) => s.isActive).toList();
+      _drinkStore = main;
     });
   }
 
@@ -158,25 +263,58 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
     });
   }
 
-  Future<void> _submit(Store mainStore) async {
-    if (_selectedItem == null) return;
-    final qty = double.tryParse(_qtyController.text);
-    if (qty == null || qty <= 0) return;
+  /// Food is bought at the main store only; drinks are bought at whichever
+  /// branch is stocking them.
+  Store _storeFor(Item item, Store mainStore) =>
+      item.isDrink ? (_drinkStore ?? mainStore) : mainStore;
 
+  void _say(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _submit(Store mainStore) async {
+    final item = _selectedItem;
+    if (item == null) {
+      _say('Choose the item you bought first.');
+      return;
+    }
+    final qty = double.tryParse(_qtyController.text.trim());
+    if (qty == null || qty <= 0) {
+      _say('Enter how much you bought, for example 25.');
+      return;
+    }
+
+    final store = _storeFor(item, mainStore);
     setState(() => _submitting = true);
     try {
       await ref
           .read(stockRepositoryProvider)
           .purchase(
-            itemId: _selectedItem!.id,
-            storeId: mainStore.id,
+            itemId: item.id,
+            storeId: store.id,
             qty: qty,
             note: _noteController.text.isEmpty ? null : _noteController.text,
           );
+
+      // Read the balance back so the person sees the stock really went in.
+      var message =
+          'Recorded: $qty ${item.unit} of ${item.name} at ${store.name}.';
+      try {
+        final rows = await ref
+            .read(stockRepositoryProvider)
+            .status(storeId: store.id);
+        final row = rows.where((r) => r.itemId == item.id).firstOrNull;
+        if (row != null) {
+          message =
+              '${item.name} at ${store.name}: ${row.balance.toStringAsFixed(0)} ${item.unit} in stock (${row.status}).';
+        }
+      } catch (_) {
+        // The purchase itself succeeded; the read-back is a courtesy.
+      }
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Purchase recorded.')));
+      _say(message);
       setState(() {
         _qtyController.clear();
         _noteController.clear();
@@ -184,10 +322,7 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
       });
     } catch (e) {
       if (!mounted) return;
-      final message = e is ApiException ? e.message : 'Something went wrong.';
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      _say(e is ApiException ? e.message : 'Something went wrong.');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -217,30 +352,45 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Stock In at ${mainStore.name}',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
+              Text('Stock In', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 16),
-              DropdownButtonFormField<Item>(
-                initialValue: _selectedItem,
-                decoration: const InputDecoration(labelText: 'Item'),
-                items: [
-                  DropdownMenuItem(
-                    value: _addNewItemSentinel,
-                    child: Text(_addNewItemSentinel.name),
-                  ),
-                  for (final item in _items)
-                    DropdownMenuItem(value: item, child: Text(item.name)),
-                ],
-                onChanged: (value) {
-                  if (value?.id == _addNewItemSentinel.id) {
+              InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () async {
+                  final value = await _chooseItem(context, _items);
+                  if (value == null) return;
+                  if (value.id == _addNewItemSentinel.id) {
                     _addNewItem();
                     return;
                   }
                   setState(() => _selectedItem = value);
                 },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Item',
+                    suffixIcon: Icon(Icons.search),
+                  ),
+                  child: Text(_selectedItem?.name ?? 'Tap to choose an item'),
+                ),
               ),
+              const SizedBox(height: 12),
+              if (_selectedItem?.isDrink ?? false)
+                DropdownButtonFormField<Store>(
+                  initialValue: _drinkStore,
+                  decoration: const InputDecoration(
+                    labelText: 'Bought for which branch',
+                  ),
+                  items: [
+                    for (final store in _stores)
+                      DropdownMenuItem(value: store, child: Text(store.name)),
+                  ],
+                  onChanged: (value) => setState(() => _drinkStore = value),
+                )
+              else
+                Text(
+                  'Food is bought for ${mainStore.name}, then transferred to the branches.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               const SizedBox(height: 12),
               TextField(
                 controller: _qtyController,
@@ -381,7 +531,7 @@ class _TransferTabState extends ConsumerState<_TransferTab> {
               const SizedBox(height: 16),
               DropdownButtonFormField<Store>(
                 initialValue: _toStore,
-                decoration: const InputDecoration(labelText: 'To store'),
+                decoration: const InputDecoration(labelText: 'To branch'),
                 items: [
                   for (final store in _outlets)
                     DropdownMenuItem(value: store, child: Text(store.name)),
@@ -497,7 +647,7 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
                   itemBuilder: (context, index) {
                     final m = movements[index];
                     return ListTile(
-                      title: Text('${m.itemName} — ${m.type}'),
+                      title: Text('${m.itemName} — ${_movementLabel(m.type)}'),
                       subtitle: Text(
                         '${m.storeName} — ${DateFormatter.dateTime(m.occurredAt)}',
                       ),

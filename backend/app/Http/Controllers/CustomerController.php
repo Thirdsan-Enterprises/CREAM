@@ -30,7 +30,7 @@ class CustomerController extends Controller
             $query->where('account_type', $request->string('account_type'));
         }
 
-        return $query->paginate();
+        return $query->paginate($this->perPage($request, 500));
     }
 
     public function show(Customer $customer)
@@ -57,12 +57,12 @@ class CustomerController extends Controller
         return response()->json($customer, 201);
     }
 
-    public function statement(Customer $customer)
+    public function statement(Request $request, Customer $customer)
     {
         return response()->json([
             'customer' => $customer,
             'balance' => $customer->balance(),
-            'entries' => $customer->ledgerEntries()->orderByDesc('occurred_at')->paginate(),
+            'entries' => $customer->ledgerEntries()->orderByDesc('occurred_at')->paginate($this->perPage($request)),
         ]);
     }
 
