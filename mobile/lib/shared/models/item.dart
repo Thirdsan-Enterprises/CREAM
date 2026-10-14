@@ -26,15 +26,19 @@ class Item {
 }
 
 class Drink {
-  Drink({required this.item, required this.price});
+  Drink({required this.item, required this.price, this.balance});
 
   factory Drink.fromJson(Map<String, dynamic> json) => Drink(
     item: Item.fromJson(json['item'] as Map<String, dynamic>),
     price: (json['price'] as num?)?.toDouble(),
+    balance: (json['balance'] as num?)?.toDouble(),
   );
 
   final Item item;
   final double? price;
+
+  /// How many this branch has in stock; null when the branch isn't known.
+  final double? balance;
 }
 
 class StoreStockBalance {

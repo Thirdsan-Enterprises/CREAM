@@ -38,10 +38,16 @@ class ItemsRepository {
     required String name,
     required String unit,
     bool isDrink = false,
+    double? safetyStock,
   }) async {
     final body = await _api.post(
       '/items',
-      data: {'name': name, 'unit': unit, 'is_drink': isDrink},
+      data: {
+        'name': name,
+        'unit': unit,
+        'is_drink': isDrink,
+        'safety_stock': ?safetyStock,
+      },
     );
     return Item.fromJson(body);
   }

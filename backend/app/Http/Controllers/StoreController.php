@@ -2,14 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ItemStoreSetting;
 use App\Models\Store;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class StoreController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return Store::query()->orderBy('name')->paginate();
+        return Store::query()->orderBy('name')->paginate($this->perPage($request, 500));
     }
 
     public function store(Request $request)
@@ -23,7 +25,14 @@ class StoreController extends Controller
             'is_active' => ['boolean'],
         ]);
 
-        return response()->json(Store::create($data), 201);
+        $store = DB::transaction(function () use ($data) {
+            $store = Store::create($data);
+            ItemStoreSetting::backfillForStore($store);
+
+            return $store;
+        });
+
+        return response()->json($store, 201);
     }
 
     public function update(Request $request, Store $store)

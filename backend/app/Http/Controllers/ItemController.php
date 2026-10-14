@@ -6,6 +6,8 @@ use App\Models\Item;
 use App\Models\ItemStoreSetting;
 use App\Services\StockService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 
 class ItemController extends Controller
 {
@@ -23,7 +25,7 @@ class ItemController extends Controller
             $query->where('is_active', $request->boolean('is_active'));
         }
 
-        return $query->paginate();
+        return $query->paginate($this->perPage($request, 500));
     }
 
     public function store(Request $request)
@@ -34,9 +36,17 @@ class ItemController extends Controller
             'category' => ['nullable', 'string', 'max:100'],
             'is_drink' => ['boolean'],
             'is_active' => ['boolean'],
+            'safety_stock' => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        return response()->json(Item::create($data), 201);
+        $item = DB::transaction(function () use ($data) {
+            $item = Item::create(Arr::except($data, 'safety_stock'));
+            ItemStoreSetting::backfillForItem($item, (float) ($data['safety_stock'] ?? 0));
+
+            return $item;
+        });
+
+        return response()->json($item, 201);
     }
 
     public function update(Request $request, Item $item)

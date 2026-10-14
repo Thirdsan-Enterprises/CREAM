@@ -46,10 +46,10 @@ Brand assets (logo, reference photos) are provided separately by Thirdsan and sh
 
 | Role | Scope | Can do |
 |---|---|---|
-| **Admin** (Owner) | All stores | Everything: stock, transfers, sales oversight, catering, customer accounts, reports, settings (stores/users/items/prices/packages) |
+| **Admin** (Owner) | All stores | Everything: stock, transfers, sales oversight, catering, customer accounts, reports, settings (stores/users/items/prices/packages). Can also ring up a sale on behalf of any branch (chooses the branch first; recorded under the owner's name) |
 | **Store Manager** | Assigned store | Confirm incoming transfers, record store consumption, view own store's sales & reports, manage own store's customer interactions |
 | **Cashier** | Assigned store | Ring up plate sales, charge to customer accounts, take deposits, view own shift summary. Cannot edit stock, prices, or packages |
-| **Storekeeper** (Kira only, optional — can be folded into Store Manager at Kira) | Kira | Record purchases (Stock In), dispatch transfers to outlets |
+| **Storekeeper** (Kira only, optional — can be folded into Store Manager at Kira) | Kira | Record purchases (Stock In), dispatch transfers to outlets. In the app: a Stocking tab and a Stock tab only; no Sell or Accounts. The Store Manager of the main store gets the Stocking tab too |
 
 A single Flutter app; after login, the UI adapts based on role + assigned store. Admin gets a store switcher; everyone else is locked to their own store.
 
@@ -142,6 +142,7 @@ ledger_entries
 - `stock_transfer_items.qty_received` can only be set once, by a user at `to_store_id`, and locks the transfer line.
 - `sales.payment_method = account` requires `customer_id` and creates a matching `ledger_entries` row atomically (DB transaction).
 - Every `sale_items` row with `item_type = drink` must atomically create a matching `stock_movements` row (type: consumption, qty = sale_items.qty) at the same store — selling a drink deducts it from that outlet's drink stock in the same transaction as the sale.
+- A drink can only be sold while the branch has it in stock: a sale line that would take the drink's balance at that store below zero is rejected (lines for the same drink are added up), and nothing from that sale is recorded. `GET /api/drinks` returns each drink's `balance` for the store so the Sell screen can show "N left". Plates need no stock.
 - Catering revenue must never be joined into daily outlet sales reports — keep `sales` and `catering_orders` fully separate tables and separate report endpoints.
 
 ---

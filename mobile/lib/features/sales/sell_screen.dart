@@ -73,7 +73,11 @@ const _paymentLabels = {
 };
 
 class SellScreen extends ConsumerStatefulWidget {
-  const SellScreen({super.key});
+  /// [storeId] is only for the owner, who sells on behalf of a branch.
+  /// Staff always sell for their own branch, so they leave it null.
+  const SellScreen({super.key, this.storeId});
+
+  final int? storeId;
 
   @override
   ConsumerState<SellScreen> createState() => _SellScreenState();
@@ -107,7 +111,10 @@ class _SellScreenState extends ConsumerState<SellScreen> {
 
     try {
       final repo = ref.read(itemsRepositoryProvider);
-      final results = await Future.wait([repo.platePrice(), repo.drinks()]);
+      final results = await Future.wait([
+        repo.platePrice(storeId: widget.storeId),
+        repo.drinks(storeId: widget.storeId),
+      ]);
       setState(() {
         _platePrice = results[0] as double;
         _availableDrinks = results[1] as List<Drink>;
@@ -118,6 +125,19 @@ class _SellScreenState extends ConsumerState<SellScreen> {
         _loadError = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  /// Re-reads the drinks quietly (no spinner) so the "left" counts are
+  /// current after a sale.
+  Future<void> _refreshDrinks() async {
+    try {
+      final drinks = await ref
+          .read(itemsRepositoryProvider)
+          .drinks(storeId: widget.storeId);
+      if (mounted) setState(() => _availableDrinks = drinks);
+    } catch (_) {
+      // Keep showing the previous counts; the server still enforces stock.
     }
   }
 
@@ -133,6 +153,20 @@ class _SellScreenState extends ConsumerState<SellScreen> {
       _drinkLines.where((l) => l.drink.item.id == drink.item.id).firstOrNull;
 
   void _incrementDrink(Drink drink) {
+    final inCart = _lineFor(drink)?.qty ?? 0;
+    final stock = drink.balance;
+    if (stock != null && inCart + 1 > stock) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            stock <= 0
+                ? '${drink.item.name} is out of stock. Record the purchase first.'
+                : 'Only ${stock.toStringAsFixed(0)} ${drink.item.name} in stock.',
+          ),
+        ),
+      );
+      return;
+    }
     setState(() {
       final existing = _lineFor(drink);
       if (existing != null) {
@@ -230,6 +264,7 @@ class _SellScreenState extends ConsumerState<SellScreen> {
           .createSale(
             paymentMethod: _paymentMethod,
             customerId: _selectedCustomer?.id,
+            storeId: widget.storeId,
             lines: lines,
           );
 
@@ -247,6 +282,7 @@ class _SellScreenState extends ConsumerState<SellScreen> {
         _selectedCustomer = null;
         _selectedCustomerBalance = null;
       });
+      _refreshDrinks();
     } catch (e) {
       if (!mounted) return;
       final message = e is ApiException ? e.message : 'Something went wrong.';
@@ -276,158 +312,193 @@ class _SellScreenState extends ConsumerState<SellScreen> {
     }
 
     return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.all(20),
+      child: Column(
         children: [
-          Text('Plate', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    CurrencyFormatter.format(_platePrice),
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  Row(
-                    children: [
-                      IconButton.filledTonal(
-                        onPressed: _plateQty > 0
-                            ? () => setState(() => _plateQty--)
-                            : null,
-                        icon: const Icon(Icons.remove),
-                      ),
-                      SizedBox(
-                        width: 44,
-                        child: Text(
-                          '$_plateQty',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.headlineSmall,
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+              children: [
+                Text('Plate', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 8),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          CurrencyFormatter.format(_platePrice),
+                          style: Theme.of(context).textTheme.headlineMedium,
                         ),
+                        Row(
+                          children: [
+                            IconButton.filledTonal(
+                              onPressed: _plateQty > 0
+                                  ? () => setState(() => _plateQty--)
+                                  : null,
+                              tooltip: 'One fewer plate',
+                              icon: const Icon(Icons.remove),
+                            ),
+                            SizedBox(
+                              width: 44,
+                              child: Text(
+                                '$_plateQty',
+                                textAlign: TextAlign.center,
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.headlineSmall,
+                              ),
+                            ),
+                            IconButton.filledTonal(
+                              onPressed: () => setState(() => _plateQty++),
+                              tooltip: 'One more plate',
+                              icon: const Icon(Icons.add),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text('Drinks', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 4),
+                Text(
+                  'Tap to add, tap again for more.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _availableDrinks.length,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 0.85,
+                  ),
+                  itemBuilder: (context, index) {
+                    final drink = _availableDrinks[index];
+                    return _DrinkTile(
+                      drink: drink,
+                      qty: _lineFor(drink)?.qty ?? 0,
+                      onAdd: () => _incrementDrink(drink),
+                      onRemove: () => _decrementDrink(drink),
+                    );
+                  },
+                ),
+                if (_availableDrinks.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Text('No drinks available.'),
+                  ),
+                const SizedBox(height: 24),
+                Text(
+                  'Payment method',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final method in _paymentMethods)
+                      ChoiceChip(
+                        label: Text(_paymentLabels[method]!),
+                        selected: _paymentMethod == method,
+                        onSelected: (_) =>
+                            setState(() => _paymentMethod = method),
                       ),
-                      IconButton.filledTonal(
-                        onPressed: () => setState(() => _plateQty++),
-                        icon: const Icon(Icons.add),
+                  ],
+                ),
+                if (_paymentMethod == 'account') ...[
+                  const SizedBox(height: 12),
+                  Card(
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.person_search),
+                          title: Text(
+                            _selectedCustomer?.name ?? 'Select customer',
+                          ),
+                          subtitle: _selectedCustomer != null
+                              ? Text(
+                                  '${_selectedCustomer!.phone} — ${_selectedCustomer!.accountTypeLabel}',
+                                )
+                              : null,
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: _pickCustomer,
+                        ),
+                        if (_selectedCustomer != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                            child: _loadingCustomerBalance
+                                ? const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: SizedBox(
+                                      height: 16,
+                                      width: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  )
+                                : _CustomerAvailabilityNotice(
+                                    available: _selectedCustomerAvailable,
+                                    total: _total,
+                                  ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          // The total and the button stay put while the order scrolls, so
+          // completing a sale never means hunting for the button.
+          Material(
+            elevation: 8,
+            color: Theme.of(context).colorScheme.surface,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Total',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      Text(
+                        CurrencyFormatter.format(_total),
+                        style: Theme.of(context).textTheme.headlineMedium,
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text('Drinks', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 4),
-          Text(
-            'Tap to add, tap again for more.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _availableDrinks.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 0.95,
-            ),
-            itemBuilder: (context, index) {
-              final drink = _availableDrinks[index];
-              return _DrinkTile(
-                drink: drink,
-                qty: _lineFor(drink)?.qty ?? 0,
-                onAdd: () => _incrementDrink(drink),
-                onRemove: () => _decrementDrink(drink),
-              );
-            },
-          ),
-          if (_availableDrinks.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Text('No drinks available.'),
-            ),
-          const SizedBox(height: 24),
-          Text('Payment method', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final method in _paymentMethods)
-                ChoiceChip(
-                  label: Text(_paymentLabels[method]!),
-                  selected: _paymentMethod == method,
-                  onSelected: (_) => setState(() => _paymentMethod = method),
-                ),
-            ],
-          ),
-          if (_paymentMethod == 'account') ...[
-            const SizedBox(height: 12),
-            Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.person_search),
-                    title: Text(_selectedCustomer?.name ?? 'Select customer'),
-                    subtitle: _selectedCustomer != null
-                        ? Text(
-                            '${_selectedCustomer!.phone} — ${_selectedCustomer!.accountTypeLabel}',
-                          )
-                        : null,
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _pickCustomer,
-                  ),
-                  if (_selectedCustomer != null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                      child: _loadingCustomerBalance
-                          ? const Align(
-                              alignment: Alignment.centerLeft,
-                              child: SizedBox(
-                                height: 16,
-                                width: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed:
+                          (_submitting ||
+                              _total <= 0 ||
+                              _wouldExceedAccountBalance)
+                          ? null
+                          : _submit,
+                      child: _submitting
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : _CustomerAvailabilityNotice(
-                              available: _selectedCustomerAvailable,
-                              total: _total,
-                            ),
+                          : const Text('Complete sale'),
                     ),
+                  ),
                 ],
               ),
-            ),
-          ],
-          const SizedBox(height: 32),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Total', style: Theme.of(context).textTheme.titleLarge),
-              Text(
-                CurrencyFormatter.format(_total),
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: (_submitting || _total <= 0 || _wouldExceedAccountBalance)
-                  ? null
-                  : _submit,
-              child: _submitting
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Complete sale'),
             ),
           ),
         ],
@@ -456,6 +527,11 @@ class _DrinkTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final selected = qty > 0;
     final colorScheme = Theme.of(context).colorScheme;
+    // A selected tile is filled dark, so its text must turn light, or the
+    // drink's name and price vanish the moment it is tapped.
+    final textColor = selected
+        ? colorScheme.onPrimaryContainer
+        : colorScheme.onSurface;
 
     return Material(
       color: selected
@@ -472,20 +548,41 @@ class _DrinkTile extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.local_drink_outlined, size: 28),
+                  Icon(Icons.local_drink_outlined, size: 28, color: textColor),
                   const SizedBox(height: 8),
                   Text(
                     drink.item.name,
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelLarge,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelLarge?.copyWith(color: textColor),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     CurrencyFormatter.format(drink.price ?? 0),
-                    style: Theme.of(context).textTheme.bodySmall,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: textColor),
                   ),
+                  if (drink.balance != null)
+                    Text(
+                      drink.balance! <= 0
+                          ? 'Out of stock'
+                          : '${drink.balance!.toStringAsFixed(0)} left',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: 11,
+                        fontWeight: drink.balance! <= 0
+                            ? FontWeight.w800
+                            : FontWeight.w500,
+                        color: drink.balance! <= 0
+                            ? (selected
+                                  ? colorScheme.onPrimaryContainer
+                                  : AppColors.danger)
+                            : textColor.withValues(alpha: 0.7),
+                      ),
+                    ),
                 ],
               ),
             ),

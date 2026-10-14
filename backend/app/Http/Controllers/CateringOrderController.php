@@ -33,7 +33,7 @@ class CateringOrderController extends Controller
             $query->whereDate('event_date', '<=', $request->date('to'));
         }
 
-        return $query->paginate()->through(
+        return $query->paginate($this->perPage($request))->through(
             fn (CateringOrder $order) => [...$order->toArray(), ...$order->financialSummary()]
         );
     }

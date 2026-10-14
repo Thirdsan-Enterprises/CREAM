@@ -38,7 +38,7 @@ class StockTransferController extends Controller
             $query->where('status', $request->string('status'));
         }
 
-        return $query->paginate();
+        return $query->paginate($this->perPage($request));
     }
 
     public function show(Request $request, StockTransfer $transfer)

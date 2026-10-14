@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\DrinkPrice;
 use App\Models\Item;
 use App\Models\PlatePrice;
+use App\Models\StockMovement;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -35,6 +36,10 @@ class SaleTest extends TestCase
             'effective_from' => now()->toDateString(), 'is_active' => true,
         ]);
         $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
+        StockMovement::create([
+            'item_id' => $soda->id, 'store_id' => $store->id, 'type' => StockMovement::TYPE_PURCHASE,
+            'qty' => 10, 'user_id' => $cashier->id, 'occurred_at' => now(),
+        ]);
 
         $response = $this->actingAs($cashier)->postJson('/api/sales', [
             'payment_method' => 'cash',
@@ -226,6 +231,10 @@ class SaleTest extends TestCase
             'effective_from' => now()->toDateString(), 'is_active' => true,
         ]);
         $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
+        StockMovement::create([
+            'item_id' => $soda->id, 'store_id' => $store->id, 'type' => StockMovement::TYPE_PURCHASE,
+            'qty' => 10, 'user_id' => $cashier->id, 'occurred_at' => now(),
+        ]);
 
         $this->actingAs($cashier)->postJson('/api/sales', [
             'payment_method' => 'cash',

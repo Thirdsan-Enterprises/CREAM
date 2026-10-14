@@ -52,7 +52,7 @@ class StockMovementController extends Controller
             $query->where('occurred_at', '<=', $request->date('to')->endOfDay());
         }
 
-        return $query->paginate();
+        return $query->paginate($this->perPage($request));
     }
 
     public function purchase(Request $request)

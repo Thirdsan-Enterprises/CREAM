@@ -44,6 +44,8 @@ class _BalancesTab extends ConsumerStatefulWidget {
 
 class _BalancesTabState extends ConsumerState<_BalancesTab> {
   late Future<List<StoreItemStatus>> _future;
+  String _query = '';
+  bool _onlyReorder = false;
 
   @override
   void initState() {
@@ -200,45 +202,91 @@ class _BalancesTabState extends ConsumerState<_BalancesTab> {
           );
         }
 
-        return RefreshIndicator(
-          onRefresh: () async => _reload(),
-          child: ListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: items.length,
-            itemBuilder: (context, index) {
-              final item = items[index];
-              return Card(
-                child: ListTile(
-                  title: Text(item.itemName),
-                  subtitle: Text(
-                    'Balance: ${item.balance.toStringAsFixed(0)} (safety: ${item.safetyStock.toStringAsFixed(0)})',
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (item.isDrink)
-                        IconButton(
-                          icon: const Icon(Icons.add_shopping_cart),
-                          tooltip: 'Buy stock',
-                          onPressed: () => _recordPurchase(item),
-                        ),
-                      Chip(
-                        label: Text(item.status),
-                        backgroundColor: item.needsReorder
-                            ? AppColors.danger
-                            : AppColors.gold,
-                        labelStyle: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  onTap: () => _logConsumption(item),
+        final query = _query.trim().toLowerCase();
+        final shown = [
+          for (final item in items)
+            if ((query.isEmpty ||
+                    item.itemName.toLowerCase().contains(query)) &&
+                (!_onlyReorder || item.needsReorder))
+              item,
+        ];
+        final reorderCount = items.where((i) => i.needsReorder).length;
+
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+              child: TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Search items',
+                  prefixIcon: Icon(Icons.search),
                 ),
-              );
-            },
-          ),
+                onChanged: (value) => setState(() => _query = value),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FilterChip(
+                  label: Text('Re-Order only ($reorderCount)'),
+                  selected: _onlyReorder,
+                  onSelected: (value) => setState(() => _onlyReorder = value),
+                ),
+              ),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () async => _reload(),
+                child: shown.isEmpty
+                    ? ListView(
+                        children: const [
+                          Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Center(child: Text('No items match.')),
+                          ),
+                        ],
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: shown.length,
+                        itemBuilder: (context, index) {
+                          final item = shown[index];
+                          return Card(
+                            child: ListTile(
+                              title: Text(item.itemName),
+                              subtitle: Text(
+                                'Balance: ${item.balance.toStringAsFixed(0)} · re-order level ${item.safetyStock.toStringAsFixed(0)}',
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (item.isDrink)
+                                    IconButton(
+                                      icon: const Icon(Icons.add_shopping_cart),
+                                      tooltip: 'Buy stock',
+                                      onPressed: () => _recordPurchase(item),
+                                    ),
+                                  Chip(
+                                    label: Text(item.status),
+                                    backgroundColor: item.needsReorder
+                                        ? AppColors.danger
+                                        : AppColors.gold,
+                                    labelStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              onTap: () => _logConsumption(item),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -380,7 +428,7 @@ class _TransferCardState extends ConsumerState<_TransferCard> {
                       ),
                     ),
                     SizedBox(
-                      width: 90,
+                      width: 120,
                       child: TextField(
                         controller: _controllers[item.id],
                         keyboardType: TextInputType.number,

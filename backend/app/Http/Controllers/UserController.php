@@ -9,9 +9,9 @@ use Illuminate\Validation\Rules\Password;
 
 class UserController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return User::query()->with('store')->orderBy('name')->paginate();
+        return User::query()->with('store')->orderBy('name')->paginate($this->perPage($request, 500));
     }
 
     public function store(Request $request)

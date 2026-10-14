@@ -6,6 +6,7 @@ import '../../core/api/repositories/customers_repository.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/formatters/date_formatter.dart';
+import '../../shared/formatters/ledger_labels.dart';
 import '../../shared/models/customer.dart';
 
 const _accountTypeFilters = <String?>[null, 'prepaid', 'credit', 'lpo'];
@@ -343,7 +344,7 @@ class _CustomerDetailSheetState extends ConsumerState<_CustomerDetailSheet> {
                           dense: true,
                           title: Text(CurrencyFormatter.format(entry.amount)),
                           subtitle: Text(
-                            '${entry.type} — ${DateFormatter.dateTime(entry.occurredAt)}',
+                            '${ledgerEntryLabel(entry.type)} — ${DateFormatter.dateTime(entry.occurredAt)}',
                           ),
                         );
                       },

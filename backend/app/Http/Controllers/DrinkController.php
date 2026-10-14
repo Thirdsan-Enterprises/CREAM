@@ -4,13 +4,19 @@ namespace App\Http\Controllers;
 
 use App\Models\DrinkPrice;
 use App\Models\Item;
+use App\Models\ItemStoreSetting;
 use App\Services\PricingService;
+use App\Services\StockService;
 use App\Support\StoreScope;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DrinkController extends Controller
 {
-    public function __construct(private readonly PricingService $pricingService) {}
+    public function __construct(
+        private readonly PricingService $pricingService,
+        private readonly StockService $stockService,
+    ) {}
 
     public function index(Request $request)
     {
@@ -21,6 +27,9 @@ class DrinkController extends Controller
         return $drinks->map(fn (Item $item) => [
             'item' => $item,
             'price' => $this->pricingService->currentDrinkPrice($item->id, $storeId),
+            // How many this branch has, so the Sell screen can show it and stop
+            // short of it. Unknown when no branch is chosen.
+            'balance' => $storeId ? $this->stockService->balance($item->id, $storeId) : null,
         ])->values();
     }
 
@@ -34,20 +43,26 @@ class DrinkController extends Controller
             'effective_from' => ['nullable', 'date'],
         ]);
 
-        $item = Item::create([
-            'name' => $data['name'],
-            'unit' => $data['unit'],
-            'is_drink' => true,
-            'is_active' => true,
-        ]);
+        [$item, $price] = DB::transaction(function () use ($data) {
+            $item = Item::create([
+                'name' => $data['name'],
+                'unit' => $data['unit'],
+                'is_drink' => true,
+                'is_active' => true,
+            ]);
 
-        $price = DrinkPrice::create([
-            'item_id' => $item->id,
-            'store_id' => $data['store_id'] ?? null,
-            'price' => $data['price'],
-            'effective_from' => $data['effective_from'] ?? now()->toDateString(),
-            'is_active' => true,
-        ]);
+            ItemStoreSetting::backfillForItem($item);
+
+            $price = DrinkPrice::create([
+                'item_id' => $item->id,
+                'store_id' => $data['store_id'] ?? null,
+                'price' => $data['price'],
+                'effective_from' => $data['effective_from'] ?? now()->toDateString(),
+                'is_active' => true,
+            ]);
+
+            return [$item, $price];
+        });
 
         return response()->json(['item' => $item, 'price' => $price], 201);
     }

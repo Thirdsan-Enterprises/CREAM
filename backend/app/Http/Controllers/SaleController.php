@@ -4,11 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use App\Models\Item;
+use App\Models\ItemStoreSetting;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\StockMovement;
+use App\Models\Store;
 use App\Services\LedgerService;
 use App\Services\PricingService;
+use App\Services\StockService;
 use App\Support\StoreScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +23,7 @@ class SaleController extends Controller
     public function __construct(
         private readonly PricingService $pricingService,
         private readonly LedgerService $ledgerService,
+        private readonly StockService $stockService,
     ) {}
 
     public function index(Request $request)
@@ -45,7 +49,7 @@ class SaleController extends Controller
             $query->where('sold_at', '<=', $request->date('to')->endOfDay());
         }
 
-        return $query->paginate();
+        return $query->paginate($this->perPage($request));
     }
 
     public function store(Request $request)
@@ -73,6 +77,8 @@ class SaleController extends Controller
         }
 
         $sale = DB::transaction(function () use ($data, $storeId, $user, $customer) {
+            $this->assertDrinksInStock($data['lines'], $storeId);
+
             $lineInputs = [];
             $total = 0;
 
@@ -140,6 +146,40 @@ class SaleController extends Controller
         });
 
         return response()->json($sale->load('items.item'), 201);
+    }
+
+    /**
+     * A drink can only be sold if the branch has it. The branch's stock
+     * balance is the single record of what is on the shelf, so a sale that
+     * would take it below zero is refused with a message that says what to
+     * do. A drink may be on several lines, so they are added up first.
+     */
+    private function assertDrinksInStock(array $lines, int $storeId): void
+    {
+        $wanted = [];
+        foreach ($lines as $line) {
+            if ($line['item_type'] === SaleItem::TYPE_DRINK) {
+                $wanted[$line['item_id']] = ($wanted[$line['item_id']] ?? 0) + (float) $line['qty'];
+            }
+        }
+
+        foreach ($wanted as $itemId => $qty) {
+            // Serialise sales of the same drink at the same branch, so two
+            // cashiers cannot both sell the last bottle.
+            ItemStoreSetting::query()
+                ->where('item_id', $itemId)->where('store_id', $storeId)
+                ->lockForUpdate()->first();
+
+            $available = $this->stockService->balance($itemId, $storeId);
+            if ($qty > $available) {
+                $item = Item::find($itemId);
+                $left = max($available, 0);
+                $branch = Store::find($storeId)?->name;
+                throw ValidationException::withMessages([
+                    'lines' => ["Only {$left} {$item?->name} in stock at {$branch}: cannot sell {$qty}. Record the purchase first."],
+                ]);
+            }
+        }
     }
 
     public function summary(Request $request)
