@@ -211,4 +211,68 @@ void main() {
       ),
     );
   });
+
+  test(
+    'an unexplained failure says what it was instead of a bare message',
+    () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://example.test/api'));
+      dio.httpClientAdapter = _Fake(
+        (o) => throw DioException(
+          requestOptions: o,
+          type: DioExceptionType.unknown,
+          error: StateError('boom'),
+        ),
+      );
+      final api = ApiClient(
+        tokenStorage: TokenStorage(storage: _BrokenStore(wipeFixesIt: true)),
+        dio: dio,
+      );
+
+      expect(
+        () => api.get('/x'),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('Something went wrong'), contains('StateError')),
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'a failed secure connection is explained and names the failure',
+    () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://example.test/api'));
+      dio.httpClientAdapter = _Fake(
+        (o) => throw DioException(
+          requestOptions: o,
+          type: DioExceptionType.unknown,
+          error: _HandshakeException(),
+        ),
+      );
+      final api = ApiClient(
+        tokenStorage: TokenStorage(storage: _BrokenStore(wipeFixesIt: true)),
+        dio: dio,
+      );
+
+      expect(
+        () => api.get('/x'),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('secure connection'),
+              contains('_HandshakeException'),
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
+
+/// Stands in for dart:io's HandshakeException (not importable on the web).
+class _HandshakeException implements Exception {}
