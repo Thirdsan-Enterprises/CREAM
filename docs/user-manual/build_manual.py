@@ -588,6 +588,10 @@ faq = [
         "Open the screen again or pull the list down. Screens show the figures from when they were opened.",
     ),
     (
+        "Sign-in does not work on one phone but works on others.",
+        "Read the red message under the Sign in button; it says what is wrong. <b>Could not reach the server</b>: the phone has no internet, or a setting such as a VPN, Private DNS, data saver or Wi-Fi security is blocking it; try mobile data instead of Wi-Fi, or the other way round. <b>Does not trust the server&rsquo;s security certificate</b>: set the phone's date and time to automatic. <b>The credentials are incorrect</b>: check the phone number and password (no spaces). If it still fails, uninstall the app, install it again, and send Thirdsan a photo of the message.",
+    ),
+    (
         "I forgot my password.",
         "Ask the owner to set a new one (1.1). If the owner forgets theirs, contact Thirdsan Enterprises.",
     ),

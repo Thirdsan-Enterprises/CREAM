@@ -96,10 +96,22 @@ class ApiClient {
       );
     }
 
+    if (e.type == DioExceptionType.badCertificate) {
+      return ApiException(
+        'This phone does not trust the server\'s security certificate. '
+        'Check that the date and time on the phone are set to automatic, '
+        'then try again.',
+      );
+    }
+
     if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.receiveTimeout ||
         e.type == DioExceptionType.connectionError) {
-      return ApiException('Could not reach the server. Check your connection.');
+      // The short code lets someone read out what went wrong over the phone.
+      return ApiException(
+        'Could not reach the server. Check your connection and try again '
+        '(${e.type.name}).',
+      );
     }
 
     return ApiException(
