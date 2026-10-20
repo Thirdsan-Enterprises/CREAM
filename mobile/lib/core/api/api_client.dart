@@ -114,8 +114,21 @@ class ApiClient {
       );
     }
 
+    // Anything else has no message of its own. Say what it was, so a person
+    // can read it out, rather than a bare "Something went wrong."
+    final cause = e.error;
+    final causeType = cause?.runtimeType.toString() ?? e.type.name;
+    if (causeType.contains('Handshake') || causeType.contains('Tls')) {
+      return ApiException(
+        'A secure connection to the server could not be made ($causeType). '
+        'Check that the date and time on the phone are set to automatic, '
+        'try mobile data instead of Wi-Fi (or the other way round), '
+        'then try again.',
+      );
+    }
+
     return ApiException(
-      e.message ?? 'Something went wrong.',
+      e.message ?? 'Something went wrong ($causeType). Please try again.',
       statusCode: e.response?.statusCode,
     );
   }
