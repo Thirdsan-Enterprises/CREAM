@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
@@ -43,7 +44,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             password: _passwordController.text,
           );
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(
+        () => _error = e is ApiException
+            ? e.message
+            : 'Sign-in failed on this phone (${e.runtimeType}). Please try again.',
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
