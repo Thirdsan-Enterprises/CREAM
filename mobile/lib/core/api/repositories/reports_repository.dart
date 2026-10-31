@@ -65,6 +65,8 @@ class DashboardData {
     required this.lowStockAlerts,
     required this.upcomingCatering,
     required this.totalOutstandingCredit,
+    this.accountsNeedingAttention = const [],
+    this.openStockRequests = 0,
   });
 
   factory DashboardData.fromJson(Map<String, dynamic> json) => DashboardData(
@@ -78,6 +80,11 @@ class DashboardData {
         .toList(),
     totalOutstandingCredit: (json['total_outstanding_credit'] as num)
         .toDouble(),
+    accountsNeedingAttention:
+        ((json['accounts_needing_attention'] as List<dynamic>?) ?? const [])
+            .map((e) => AccountAlert.fromJson(e as Map<String, dynamic>))
+            .toList(),
+    openStockRequests: (json['open_stock_requests'] as num?)?.toInt() ?? 0,
   );
 
   final double salesTotalToday;
@@ -85,6 +92,27 @@ class DashboardData {
   final List<LowStockAlert> lowStockAlerts;
   final List<UpcomingCateringEvent> upcomingCatering;
   final double totalOutstandingCredit;
+
+  /// Credit accounts at 80%+ of their limit, prepaid ones below a plate.
+  final List<AccountAlert> accountsNeedingAttention;
+
+  /// Branch requests procurement has not answered yet.
+  final int openStockRequests;
+}
+
+class AccountAlert {
+  AccountAlert.fromJson(Map<String, dynamic> json)
+    : name = json['name'] as String,
+      storeName = json['store_name'] as String?,
+      status = json['status'] as String,
+      warning = json['warning'] as String? ?? '',
+      available = (json['available'] as num).toDouble();
+
+  final String name;
+  final String? storeName;
+  final String status;
+  final String warning;
+  final double available;
 }
 
 class StoreStockStatus {

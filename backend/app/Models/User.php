@@ -44,4 +44,18 @@ class User extends Authenticatable
     {
         return $this->role === self::ROLE_ADMIN;
     }
+
+    /**
+     * Works for the procurement unit: buys stock and sends it to branches.
+     * That is the storekeeper ("Procurement" in the app) and the manager of
+     * the main store. The owner can do all of it too.
+     */
+    public function isProcurement(): bool
+    {
+        if ($this->role === self::ROLE_STOREKEEPER) {
+            return true;
+        }
+
+        return $this->role === self::ROLE_STORE_MANAGER && (bool) $this->store?->is_main;
+    }
 }

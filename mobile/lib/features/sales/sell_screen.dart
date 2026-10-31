@@ -10,10 +10,11 @@ import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/models/customer.dart';
 import '../../shared/models/item.dart';
 import '../../shared/models/sale.dart';
+import '../customers/customers_view.dart';
 
-class _DrinkLine {
-  _DrinkLine(this.drink, this.qty);
-  final Drink drink;
+class _MenuLine {
+  _MenuLine(this.entry, this.qty);
+  final MenuEntry entry;
   int qty;
 }
 
@@ -87,13 +88,16 @@ class _SellScreenState extends ConsumerState<SellScreen> {
   bool _loading = true;
   String? _loadError;
   double _platePrice = 0;
-  List<Drink> _availableDrinks = [];
+  List<MenuEntry> _menu = [];
 
-  int _plateQty = 1;
-  final List<_DrinkLine> _drinkLines = [];
+  // A sale starts empty: a plate is one tap, and an egg or a cup of tea on
+  // its own is never charged a plate by mistake.
+  int _plateQty = 0;
+  final List<_MenuLine> _lines = [];
   String _paymentMethod = 'cash';
   Customer? _selectedCustomer;
   double? _selectedCustomerBalance;
+  AccountStanding? _selectedStanding;
   bool _loadingCustomerBalance = false;
   bool _submitting = false;
 
@@ -113,11 +117,11 @@ class _SellScreenState extends ConsumerState<SellScreen> {
       final repo = ref.read(itemsRepositoryProvider);
       final results = await Future.wait([
         repo.platePrice(storeId: widget.storeId),
-        repo.drinks(storeId: widget.storeId),
+        repo.menu(storeId: widget.storeId),
       ]);
       setState(() {
         _platePrice = results[0] as double;
-        _availableDrinks = results[1] as List<Drink>;
+        _menu = results[1] as List<MenuEntry>;
         _loading = false;
       });
     } catch (e) {
@@ -128,14 +132,14 @@ class _SellScreenState extends ConsumerState<SellScreen> {
     }
   }
 
-  /// Re-reads the drinks quietly (no spinner) so the "left" counts are
+  /// Re-reads the menu quietly (no spinner) so the "left" counts are
   /// current after a sale.
-  Future<void> _refreshDrinks() async {
+  Future<void> _refreshMenu() async {
     try {
-      final drinks = await ref
+      final menu = await ref
           .read(itemsRepositoryProvider)
-          .drinks(storeId: widget.storeId);
-      if (mounted) setState(() => _availableDrinks = drinks);
+          .menu(storeId: widget.storeId);
+      if (mounted) setState(() => _menu = menu);
     } catch (_) {
       // Keep showing the previous counts; the server still enforces stock.
     }
@@ -143,48 +147,66 @@ class _SellScreenState extends ConsumerState<SellScreen> {
 
   double get _total {
     var total = _plateQty * _platePrice;
-    for (final line in _drinkLines) {
-      total += line.qty * (line.drink.price ?? 0);
+    for (final line in _lines) {
+      total += line.qty * (line.entry.price ?? 0);
     }
     return total;
   }
 
-  _DrinkLine? _lineFor(Drink drink) =>
-      _drinkLines.where((l) => l.drink.item.id == drink.item.id).firstOrNull;
+  /// "2 plates · 1 Soda · 2 Egg", shown above the total.
+  String get _cartSummary {
+    final parts = <String>[
+      if (_plateQty > 0) '$_plateQty ${_plateQty == 1 ? 'plate' : 'plates'}',
+      for (final line in _lines) '${line.qty} ${line.entry.item.name}',
+    ];
+    return parts.isEmpty ? 'Nothing added yet' : parts.join(' · ');
+  }
 
-  void _incrementDrink(Drink drink) {
-    final inCart = _lineFor(drink)?.qty ?? 0;
-    final stock = drink.balance;
+  /// Menu entries grouped under their headings, in the server's order.
+  Map<String, List<MenuEntry>> get _menuByCategory {
+    final groups = <String, List<MenuEntry>>{};
+    for (final entry in _menu) {
+      groups.putIfAbsent(entry.category, () => []).add(entry);
+    }
+    return groups;
+  }
+
+  _MenuLine? _lineFor(MenuEntry entry) =>
+      _lines.where((l) => l.entry.item.id == entry.item.id).firstOrNull;
+
+  void _increment(MenuEntry entry) {
+    final inCart = _lineFor(entry)?.qty ?? 0;
+    final stock = entry.tracksStock ? entry.balance : null;
     if (stock != null && inCart + 1 > stock) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             stock <= 0
-                ? '${drink.item.name} is out of stock. Record the purchase first.'
-                : 'Only ${stock.toStringAsFixed(0)} ${drink.item.name} in stock.',
+                ? '${entry.item.name} is out of stock. Record the purchase first.'
+                : 'Only ${stock.toStringAsFixed(0)} ${entry.item.name} in stock.',
           ),
         ),
       );
       return;
     }
     setState(() {
-      final existing = _lineFor(drink);
+      final existing = _lineFor(entry);
       if (existing != null) {
         existing.qty++;
       } else {
-        _drinkLines.add(_DrinkLine(drink, 1));
+        _lines.add(_MenuLine(entry, 1));
       }
     });
   }
 
-  void _decrementDrink(Drink drink) {
+  void _decrement(MenuEntry entry) {
     setState(() {
-      final existing = _lineFor(drink);
+      final existing = _lineFor(entry);
       if (existing == null) return;
       if (existing.qty > 1) {
         existing.qty--;
       } else {
-        _drinkLines.remove(existing);
+        _lines.remove(existing);
       }
     });
   }
@@ -193,22 +215,26 @@ class _SellScreenState extends ConsumerState<SellScreen> {
     final customer = await showModalBottomSheet<Customer>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => const _CustomerSearchSheet(),
+      builder: (context) => _CustomerSearchSheet(storeId: widget.storeId),
     );
     if (customer == null) return;
 
     setState(() {
       _selectedCustomer = customer;
       _selectedCustomerBalance = null;
+      _selectedStanding = null;
       _loadingCustomerBalance = true;
     });
 
     try {
-      final balance = await ref
+      final standing = await ref
           .read(customersRepositoryProvider)
-          .balance(customer.id);
+          .standing(customer.id);
       if (!mounted || _selectedCustomer?.id != customer.id) return;
-      setState(() => _selectedCustomerBalance = balance);
+      setState(() {
+        _selectedCustomerBalance = standing.balance;
+        _selectedStanding = standing;
+      });
     } catch (_) {
       // Balance is a convenience preview only — the server re-checks it
       // authoritatively on submit, so a fetch failure here isn't fatal.
@@ -250,16 +276,17 @@ class _SellScreenState extends ConsumerState<SellScreen> {
 
     try {
       final lines = <SaleLine>[
-        SaleLine(itemType: 'plate', qty: _plateQty.toDouble()),
-        for (final line in _drinkLines)
+        if (_plateQty > 0)
+          SaleLine(itemType: 'plate', qty: _plateQty.toDouble()),
+        for (final line in _lines)
           SaleLine(
-            itemType: 'drink',
-            itemId: line.drink.item.id,
+            itemType: line.entry.item.isDrink ? 'drink' : 'item',
+            itemId: line.entry.item.id,
             qty: line.qty.toDouble(),
           ),
       ];
 
-      await ref
+      final result = await ref
           .read(salesRepositoryProvider)
           .createSale(
             paymentMethod: _paymentMethod,
@@ -275,14 +302,42 @@ class _SellScreenState extends ConsumerState<SellScreen> {
           backgroundColor: AppColors.success,
         ),
       );
+      // An account that is now near or at its limit: say so while the
+      // customer is still at the counter.
+      final account = result['customer_account'];
+      if (account is Map<String, dynamic>) {
+        final standing = AccountStanding.fromJson(account);
+        if (standing.warning != null) {
+          showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              icon: Icon(
+                standing.isBlocked ? Icons.block : Icons.warning_amber,
+                color: standing.isBlocked
+                    ? AppColors.danger
+                    : const Color(0xFFB7791F),
+              ),
+              title: const Text('Sale completed'),
+              content: Text(standing.warning!),
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+      }
       setState(() {
-        _plateQty = 1;
-        _drinkLines.clear();
+        _plateQty = 0;
+        _selectedStanding = null;
+        _lines.clear();
         _paymentMethod = 'cash';
         _selectedCustomer = null;
         _selectedCustomerBalance = null;
       });
-      _refreshDrinks();
+      _refreshMenu();
     } catch (e) {
       if (!mounted) return;
       final message = e is ApiException ? e.message : 'Something went wrong.';
@@ -319,6 +374,11 @@ class _SellScreenState extends ConsumerState<SellScreen> {
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
               children: [
                 Text('Plate', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 4),
+                Text(
+                  'Tap + for each plate. Leave at 0 for drinks or breakfast on their own.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
                 const SizedBox(height: 8),
                 Card(
                   child: Padding(
@@ -360,38 +420,39 @@ class _SellScreenState extends ConsumerState<SellScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                Text('Drinks', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 4),
-                Text(
-                  'Tap to add, tap again for more.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 12),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _availableDrinks.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    childAspectRatio: 0.85,
+                for (final group in _menuByCategory.entries) ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    group.key,
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  itemBuilder: (context, index) {
-                    final drink = _availableDrinks[index];
-                    return _DrinkTile(
-                      drink: drink,
-                      qty: _lineFor(drink)?.qty ?? 0,
-                      onAdd: () => _incrementDrink(drink),
-                      onRemove: () => _decrementDrink(drink),
-                    );
-                  },
-                ),
-                if (_availableDrinks.isEmpty)
+                  const SizedBox(height: 12),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: group.value.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: 0.85,
+                        ),
+                    itemBuilder: (context, index) {
+                      final entry = group.value[index];
+                      return _MenuTile(
+                        entry: entry,
+                        qty: _lineFor(entry)?.qty ?? 0,
+                        onAdd: () => _increment(entry),
+                        onRemove: () => _decrement(entry),
+                      );
+                    },
+                  ),
+                ],
+                if (_menu.isEmpty)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Text('No drinks available.'),
+                    child: Text('Nothing else on the menu yet.'),
                   ),
                 const SizedBox(height: 24),
                 Text(
@@ -443,9 +504,23 @@ class _SellScreenState extends ConsumerState<SellScreen> {
                                       ),
                                     ),
                                   )
-                                : _CustomerAvailabilityNotice(
-                                    available: _selectedCustomerAvailable,
-                                    total: _total,
+                                : Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      _CustomerAvailabilityNotice(
+                                        available: _selectedCustomerAvailable,
+                                        total: _total,
+                                      ),
+                                      if (_selectedStanding != null &&
+                                          _selectedStanding!.status !=
+                                              'ok') ...[
+                                        const SizedBox(height: 8),
+                                        StandingBanner(
+                                          standing: _selectedStanding!,
+                                        ),
+                                      ],
+                                    ],
                                   ),
                           ),
                       ],
@@ -465,6 +540,16 @@ class _SellScreenState extends ConsumerState<SellScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _cartSummary,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -507,28 +592,36 @@ class _SellScreenState extends ConsumerState<SellScreen> {
   }
 }
 
-/// A single tappable drink tile — the modern-POS grid pattern (Square,
+/// A single tappable menu tile — the modern-POS grid pattern (Square,
 /// Toast, Clover): tap to add one, a badge shows the current quantity,
 /// a small remove control appears once it's in the cart.
-class _DrinkTile extends StatelessWidget {
-  const _DrinkTile({
-    required this.drink,
+class _MenuTile extends StatelessWidget {
+  const _MenuTile({
+    required this.entry,
     required this.qty,
     required this.onAdd,
     required this.onRemove,
   });
 
-  final Drink drink;
+  final MenuEntry entry;
   final int qty;
   final VoidCallback onAdd;
   final VoidCallback onRemove;
 
+  IconData get _icon => switch (entry.category.toLowerCase()) {
+    'drinks' => Icons.local_drink_outlined,
+    'breakfast' => Icons.free_breakfast_outlined,
+    'snacks' => Icons.cookie_outlined,
+    _ => Icons.restaurant_outlined,
+  };
+
   @override
   Widget build(BuildContext context) {
+    final balance = entry.tracksStock ? entry.balance : null;
     final selected = qty > 0;
     final colorScheme = Theme.of(context).colorScheme;
     // A selected tile is filled dark, so its text must turn light, or the
-    // drink's name and price vanish the moment it is tapped.
+    // item's name and price vanish the moment it is tapped.
     final textColor = selected
         ? colorScheme.onPrimaryContainer
         : colorScheme.onSurface;
@@ -548,10 +641,10 @@ class _DrinkTile extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.local_drink_outlined, size: 28, color: textColor),
+                  Icon(_icon, size: 28, color: textColor),
                   const SizedBox(height: 8),
                   Text(
-                    drink.item.name,
+                    entry.item.name,
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -561,22 +654,22 @@ class _DrinkTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    CurrencyFormatter.format(drink.price ?? 0),
+                    CurrencyFormatter.format(entry.price ?? 0),
                     style: Theme.of(
                       context,
                     ).textTheme.bodySmall?.copyWith(color: textColor),
                   ),
-                  if (drink.balance != null)
+                  if (balance != null)
                     Text(
-                      drink.balance! <= 0
+                      balance <= 0
                           ? 'Out of stock'
-                          : '${drink.balance!.toStringAsFixed(0)} left',
+                          : '${balance.toStringAsFixed(0)} left',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         fontSize: 11,
-                        fontWeight: drink.balance! <= 0
+                        fontWeight: balance <= 0
                             ? FontWeight.w800
                             : FontWeight.w500,
-                        color: drink.balance! <= 0
+                        color: balance <= 0
                             ? (selected
                                   ? colorScheme.onPrimaryContainer
                                   : AppColors.danger)
@@ -614,7 +707,10 @@ class _DrinkTile extends StatelessWidget {
 }
 
 class _CustomerSearchSheet extends ConsumerStatefulWidget {
-  const _CustomerSearchSheet();
+  const _CustomerSearchSheet({this.storeId});
+
+  /// The branch the owner is selling for; null for staff.
+  final int? storeId;
 
   @override
   ConsumerState<_CustomerSearchSheet> createState() =>
@@ -626,10 +722,18 @@ class _CustomerSearchSheetState extends ConsumerState<_CustomerSearchSheet> {
   List<Customer> _results = [];
   bool _searching = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _search('');
+  }
+
   Future<void> _search(String query) async {
     setState(() => _searching = true);
     try {
-      final results = await ref.read(customersRepositoryProvider).search(query);
+      final results = await ref
+          .read(customersRepositoryProvider)
+          .search(query, availableAt: widget.storeId);
       if (mounted) setState(() => _results = results);
     } finally {
       if (mounted) setState(() => _searching = false);
@@ -673,7 +777,11 @@ class _CustomerSearchSheetState extends ConsumerState<_CustomerSearchSheet> {
                   for (final customer in _results)
                     ListTile(
                       title: Text(customer.name),
-                      subtitle: Text(customer.phone),
+                      subtitle: Text(
+                        '${customer.phone} · ${customer.accountTypeLabel}',
+                      ),
+                      trailing: StandingBadge(customer: customer),
+                      enabled: customer.isActive,
                       onTap: () => Navigator.of(context).pop(customer),
                     ),
                 ],

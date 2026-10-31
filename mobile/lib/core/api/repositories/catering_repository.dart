@@ -82,7 +82,9 @@ class CateringOrder {
       clientPhone: json['client_phone'] as String,
       eventName: json['event_name'] as String?,
       eventDate: DateTime.parse(json['event_date'] as String),
-      package: CateringPackage.fromJson(json['package'] as Map<String, dynamic>),
+      package: CateringPackage.fromJson(
+        json['package'] as Map<String, dynamic>,
+      ),
       pricePerPlate: json['price_per_plate'] != null
           ? double.parse(json['price_per_plate'].toString())
           : null,
@@ -159,11 +161,12 @@ class CateringRepository {
 
   Future<CateringPackage> updatePackagePrice(
     int packageId,
-    double pricePerPlate,
-  ) async {
+    double pricePerPlate, {
+    required String reason,
+  }) async {
     final body = await _api.patch(
       '/catering-packages/$packageId',
-      data: {'price_per_plate': pricePerPlate},
+      data: {'price_per_plate': pricePerPlate, 'reason': reason},
     );
     return CateringPackage.fromJson(body);
   }
@@ -204,6 +207,16 @@ class CateringRepository {
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       },
     );
+    return CateringOrder.fromJson(body);
+  }
+
+  /// Changes what was agreed on an order; [changes] must include a
+  /// 'reason'.
+  Future<CateringOrder> updateOrder(
+    int orderId,
+    Map<String, Object> changes,
+  ) async {
+    final body = await _api.patch('/catering-orders/$orderId', data: changes);
     return CateringOrder.fromJson(body);
   }
 

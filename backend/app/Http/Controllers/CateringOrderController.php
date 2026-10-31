@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\CateringOrder;
 use App\Models\CateringPackage;
+use App\Models\EditLog;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class CateringOrderController extends Controller
 {
@@ -86,8 +89,16 @@ class CateringOrderController extends Controller
             'number_of_plates' => ['sometimes', 'integer', 'min:1'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'status' => ['sometimes', Rule::in(self::STATUSES)],
+            'reason' => ['nullable', 'string', 'max:500'],
         ]);
 
+        $tracked = ['client_name', 'client_phone', 'event_name', 'event_date', 'catering_package_id',
+            'price_per_plate', 'number_of_plates', 'total_amount', 'notes', 'status'];
+        $before = $cateringOrder->only($tracked);
+        $before['event_date'] = $cateringOrder->event_date?->toDateString();
+
+        $reason = trim($data['reason'] ?? '');
+        unset($data['reason']);
         $cateringOrder->fill($data);
 
         if ($cateringOrder->isDirty('catering_package_id') && ! $request->filled('price_per_plate')) {
@@ -99,7 +110,29 @@ class CateringOrderController extends Controller
             $cateringOrder->total_amount = $cateringOrder->price_per_plate * $cateringOrder->number_of_plates;
         }
 
-        $cateringOrder->save();
+        $after = $cateringOrder->only($tracked);
+        $after['event_date'] = $cateringOrder->event_date?->toDateString();
+        $changes = EditLog::diff($before, $after);
+
+        // Moving an order along (quoted → confirmed → delivered) is normal
+        // work; changing what was agreed (plates, price, date, client) is an
+        // edit and needs a reason.
+        $edited = array_diff(array_keys($changes), ['status']);
+        if ($edited && $reason === '') {
+            throw ValidationException::withMessages(['reason' => ['Say why this order is being changed.']]);
+        }
+
+        DB::transaction(function () use ($cateringOrder, $changes, $edited, $reason, $request) {
+            $cateringOrder->save();
+            if ($changes) {
+                EditLog::record(
+                    $request->user(), 'catering_order', $cateringOrder->id,
+                    'Catering: '.$cateringOrder->client_name.($cateringOrder->event_name ? ' ('.$cateringOrder->event_name.')' : ''),
+                    $edited ? 'edited' : 'status_changed',
+                    $changes, $reason !== '' ? $reason : 'Status update', null,
+                );
+            }
+        });
 
         return response()->json([...$cateringOrder->load('package')->toArray(), ...$cateringOrder->financialSummary()]);
     }

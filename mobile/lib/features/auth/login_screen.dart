@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/constants.dart';
 import '../../core/theme/app_theme.dart';
+import 'connection_check.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -135,6 +137,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   : const Text('Sign in'),
                             ),
                           ),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            onPressed: () => showModalBottomSheet<void>(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: AppColors.charcoal,
+                              builder: (_) => const _ConnectionCheckSheet(),
+                            ),
+                            child: const Text(
+                              'Trouble signing in? Check this phone',
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -199,6 +213,119 @@ class _Brandmark extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Runs [runConnectionChecks] and shows each result, so a photo of this sheet
+/// says what is wrong with one phone's sign-in.
+class _ConnectionCheckSheet extends StatefulWidget {
+  const _ConnectionCheckSheet();
+
+  @override
+  State<_ConnectionCheckSheet> createState() => _ConnectionCheckSheetState();
+}
+
+class _ConnectionCheckSheetState extends State<_ConnectionCheckSheet> {
+  late Future<List<CheckResult>> _future = runConnectionChecks();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Check this phone',
+              style: TextStyle(
+                color: AppColors.cream,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Take a photo of this screen and send it to Thirdsan.',
+              style: TextStyle(
+                color: AppColors.creamDark.withValues(alpha: 0.8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FutureBuilder<List<CheckResult>>(
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final results = snapshot.data ?? const [];
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final r in results)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              r.ok ? Icons.check_circle : Icons.error,
+                              color: r.ok
+                                  ? const Color(0xFF8FC9A4)
+                                  : const Color(0xFFE07A64),
+                              size: 22,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    r.label,
+                                    style: const TextStyle(
+                                      color: AppColors.cream,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    r.detail,
+                                    style: TextStyle(
+                                      color: AppColors.creamDark.withValues(
+                                        alpha: 0.85,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Text(
+                      'Server: ${AppConfig.apiBaseUrl}',
+                      style: TextStyle(
+                        color: AppColors.creamDark.withValues(alpha: 0.6),
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () =>
+                          setState(() => _future = runConnectionChecks()),
+                      child: const Text('Check again'),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

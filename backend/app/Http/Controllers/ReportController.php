@@ -6,7 +6,9 @@ use App\Models\CateringOrder;
 use App\Models\Customer;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\StockRequest;
 use App\Models\Store;
+use App\Services\CustomerStanding;
 use App\Services\StockService;
 use Illuminate\Http\Request;
 
@@ -16,7 +18,7 @@ class ReportController extends Controller
 
     public function dashboard()
     {
-        $todaySales = Sale::query()->whereDate('sold_at', now()->toDateString())->with('items')->get();
+        $todaySales = Sale::query()->counted()->whereDate('sold_at', now()->toDateString())->with('items')->get();
 
         $salesByStore = $todaySales->groupBy('store_id')->map(fn ($sales) => [
             'total' => $sales->sum('total'),
@@ -34,11 +36,18 @@ class ReportController extends Controller
             'low_stock_alerts' => $this->lowStockAlerts(),
             'upcoming_catering' => $this->upcomingCateringOrders(7),
             'total_outstanding_credit' => $this->totalOutstandingCredit(),
+            'accounts_needing_attention' => $this->accountsNeedingAttention(),
+            'open_stock_requests' => StockRequest::where('status', StockRequest::STATUS_OPEN)->count(),
         ]);
     }
 
-    public function stockStatus()
+    public function stockStatus(Request $request)
     {
+        $user = $request->user();
+        if (! $user->isAdmin() && ! $user->isProcurement()) {
+            abort(403, 'Only the owner and the procurement unit see every branch\'s stock.');
+        }
+
         $stores = Store::query()->where('is_active', true)->get();
 
         return response()->json(
@@ -52,10 +61,12 @@ class ReportController extends Controller
 
     public function outstandingCredit()
     {
-        $customers = Customer::query()->where('account_type', Customer::TYPE_CREDIT)->with('ledgerEntries')->get();
+        $customers = Customer::query()->where('account_type', Customer::TYPE_CREDIT)->with(['ledgerEntries', 'store:id,name'])->get();
+        $standing = app(CustomerStanding::class);
 
-        $outstanding = $customers->map(function (Customer $customer) {
+        $outstanding = $customers->map(function (Customer $customer) use ($standing) {
             $balance = $customer->balance();
+            $state = $standing->for($customer, $balance);
             $lastDeposit = $customer->ledgerEntries()
                 ->where('type', 'deposit')
                 ->orderByDesc('occurred_at')
@@ -69,6 +80,9 @@ class ReportController extends Controller
                 'phone' => $customer->phone,
                 'balance' => $balance,
                 'credit_limit' => (float) $customer->credit_limit,
+                'credit_used_pct' => $state['credit_used_pct'],
+                'status' => $state['status'],
+                'store_name' => $customer->store?->name,
                 'days_since_last_payment' => now()->diffInDays($since),
             ];
         })->filter(fn ($row) => $row['balance'] < 0)->values();
@@ -150,5 +164,34 @@ class ReportController extends Controller
         }
 
         return $total;
+    }
+
+    /**
+     * Accounts staff should know about before charging: credit customers at
+     * 80%+ of their limit, and prepaid/LPO accounts that cannot cover a plate.
+     */
+    private function accountsNeedingAttention(): array
+    {
+        $standing = app(CustomerStanding::class);
+
+        return Customer::query()
+            ->where('is_active', true)
+            ->with('store:id,name')
+            ->withSum('ledgerEntries as balance', 'amount')
+            // An account never used yet is not a warning.
+            ->whereHas('ledgerEntries')
+            ->get()
+            ->map(fn (Customer $c) => [
+                'customer_id' => $c->id,
+                'name' => $c->name,
+                'account_type' => $c->account_type,
+                'store_name' => $c->store?->name,
+                ...$standing->for($c, (float) $c->balance),
+            ])
+            ->filter(fn ($row) => $row['status'] !== 'ok')
+            // Credit customers who owe money first: they matter most.
+            ->sortBy(fn ($row) => [$row['status'] === 'blocked' ? 0 : 1, $row['available']])
+            ->values()
+            ->all();
     }
 }

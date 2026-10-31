@@ -30,7 +30,18 @@ class PricingService
         return (float) ($global->price ?? 25000);
     }
 
+    /** Same as currentItemPrice; kept for callers written when only drinks were sold. */
     public function currentDrinkPrice(int $itemId, ?int $storeId): ?float
+    {
+        return $this->currentItemPrice($itemId, $storeId);
+    }
+
+    /**
+     * The price of any menu item (drink, egg, tea...) at a branch: the
+     * branch's own price if it has one, otherwise the price for all branches.
+     * Prices live in drink_prices for historical reasons.
+     */
+    public function currentItemPrice(int $itemId, ?int $storeId): ?float
     {
         if ($storeId !== null) {
             $override = DrinkPrice::where('item_id', $itemId)

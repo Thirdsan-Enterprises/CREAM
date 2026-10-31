@@ -71,6 +71,45 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 label: 'Total outstanding credit',
                 value: CurrencyFormatter.format(data.totalOutstandingCredit),
               ),
+              if (data.openStockRequests > 0) ...[
+                const SizedBox(height: 12),
+                _StatCard(
+                  label: 'Branch requests waiting for procurement',
+                  value: '${data.openStockRequests}',
+                ),
+              ],
+              if (data.accountsNeedingAttention.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Text(
+                  'Accounts near their limit (${data.accountsNeedingAttention.length})',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: Column(
+                    children: [
+                      for (final alert in data.accountsNeedingAttention.take(8))
+                        ListTile(
+                          dense: true,
+                          leading: Icon(
+                            alert.status == 'blocked'
+                                ? Icons.block
+                                : Icons.warning_amber,
+                            color: alert.status == 'blocked'
+                                ? AppColors.danger
+                                : AppColors.gold,
+                          ),
+                          title: Text(
+                            alert.storeName == null
+                                ? alert.name
+                                : '${alert.name} · ${alert.storeName}',
+                          ),
+                          subtitle: Text(alert.warning),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               Text(
                 data.lowStockAlerts.isEmpty
@@ -82,7 +121,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 const Padding(
                   padding: EdgeInsets.only(top: 4),
                   child: Text(
-                    'An item shows here when a branch\'s stock is at or below its re-order level. Buy it at Kira or transfer it from Kira.',
+                    'An item shows here when a branch\'s stock is at or below its re-order level. Procurement buys it and sends it to the branch.',
                   ),
                 ),
               const SizedBox(height: 8),

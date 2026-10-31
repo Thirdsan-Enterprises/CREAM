@@ -3,11 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['store_id', 'sold_by', 'payment_method', 'customer_id', 'total', 'sold_at'])]
+#[Fillable(['store_id', 'sold_by', 'payment_method', 'customer_id', 'total', 'sold_at', 'voided_at', 'voided_by', 'void_reason'])]
 class Sale extends Model
 {
     public const PAYMENT_CASH = 'cash';
@@ -25,7 +26,24 @@ class Sale extends Model
         return [
             'total' => 'decimal:2',
             'sold_at' => 'datetime',
+            'voided_at' => 'datetime',
         ];
+    }
+
+    /** Sales that count: everything except voided ones. */
+    public function scopeCounted(Builder $query): void
+    {
+        $query->whereNull('voided_at');
+    }
+
+    public function isVoided(): bool
+    {
+        return $this->voided_at !== null;
+    }
+
+    public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by');
     }
 
     public function store(): BelongsTo

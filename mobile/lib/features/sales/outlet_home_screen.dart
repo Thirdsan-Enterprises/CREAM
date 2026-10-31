@@ -5,6 +5,7 @@ import '../../core/auth/auth_session.dart';
 import '../../core/auth/user.dart';
 import '../../core/theme/app_theme.dart';
 import '../branches/branch_detail_screen.dart';
+import '../changes/changes_screen.dart';
 import '../customers/accounts_screen.dart';
 import '../stock/stock_screen.dart';
 import '../stock/stocking_screen.dart';
@@ -130,6 +131,24 @@ class _OutletHomeScreenState extends ConsumerState<OutletHomeScreen> {
                     builder: (_) => BranchDetailScreen(
                       storeId: user.store!.id,
                       storeName: user.store!.name,
+                    ),
+                  ),
+                ),
+              ),
+            if (user != null &&
+                user.role == UserRole.storeManager &&
+                user.store != null)
+              IconButton(
+                icon: const Icon(Icons.history),
+                tooltip: 'Changes',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => Theme(
+                      data: AppTheme.outletTerminal(),
+                      child: Scaffold(
+                        appBar: AppBar(title: const Text('Changes')),
+                        body: ChangesScreen(storeId: user.store!.id),
+                      ),
                     ),
                   ),
                 ),

@@ -6,6 +6,7 @@ import '../../core/api/repositories/stores_repository.dart';
 import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/formatters/date_formatter.dart';
 import '../../shared/models/sale.dart';
+import '../../shared/widgets/sale_detail_sheet.dart';
 
 class BackOfficeSalesScreen extends ConsumerStatefulWidget {
   const BackOfficeSalesScreen({super.key});
@@ -111,6 +112,13 @@ class _BackOfficeSalesScreenState extends ConsumerState<BackOfficeSalesScreen> {
                   ),
                 ],
               ),
+              if (summary.itemRevenue > 0) ...[
+                const SizedBox(height: 12),
+                _StatCard(
+                  label: 'Breakfast & other items',
+                  value: CurrencyFormatter.format(summary.itemRevenue),
+                ),
+              ],
               const SizedBox(height: 24),
               Text(
                 'Sales (${sales.length})',
@@ -118,15 +126,17 @@ class _BackOfficeSalesScreenState extends ConsumerState<BackOfficeSalesScreen> {
               ),
               const SizedBox(height: 8),
               for (final sale in sales)
-                Card(
-                  child: ListTile(
-                    title: Text(
-                      '${sale.storeName} — ${CurrencyFormatter.format(sale.total)}',
-                    ),
-                    subtitle: Text(
-                      '${sale.paymentMethod} — ${sale.soldByName} — ${DateFormatter.dateTime(sale.soldAt)}',
-                    ),
-                  ),
+                SaleListTile(
+                  sale: sale,
+                  showStore: true,
+                  onTap: () async {
+                    final voided = await showSaleDetail(
+                      context,
+                      sale,
+                      canVoid: true,
+                    );
+                    if (voided) _reload();
+                  },
                 ),
             ],
           ),

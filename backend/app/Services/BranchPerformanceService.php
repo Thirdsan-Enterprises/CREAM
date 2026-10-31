@@ -51,13 +51,15 @@ class BranchPerformanceService
 
         $storeIds = $sales->pluck('store_id')->unique();
         $stores = Store::query()
-            ->where(fn ($q) => $q->where('is_active', true)->orWhereIn('id', $storeIds))
+            // A procurement unit that does not sell is not a branch here.
+            ->where(fn ($q) => $q->where(fn ($q) => $q->where('is_active', true)->where('sells', true))->orWhereIn('id', $storeIds))
             ->orderByDesc('is_main')
             ->orderBy('name')
             ->get();
 
         $grandTotal = (float) $sales->sum('total');
         $lastSaleAt = DB::table('sales')
+            ->whereNull('voided_at')
             ->selectRaw('store_id, MAX(sold_at) as last_sale_at')
             ->groupBy('store_id')
             ->pluck('last_sale_at', 'store_id');
@@ -119,6 +121,7 @@ class BranchPerformanceService
             'by_payment_method' => $this->byPaymentMethod($sales)->values(),
             'by_cashier' => $this->byCashier($sales, $items),
             'drinks' => $this->drinks($items),
+            'menu_items' => $this->menuItems($items),
             'stock_used' => $this->stockUsed($period, $store->id),
             'stock' => [
                 'reorder_count' => $stock->where('status', 'Re-Order')->count(),
@@ -179,6 +182,7 @@ class BranchPerformanceService
     {
         return DB::table('sales')
             ->leftJoin('users', 'users.id', '=', 'sales.sold_by')
+            ->whereNull('sales.voided_at')
             ->whereBetween('sales.sold_at', $this->bounds($period))
             ->when($storeId, fn ($q) => $q->where('sales.store_id', $storeId))
             ->orderBy('sales.sold_at')
@@ -199,11 +203,12 @@ class BranchPerformanceService
         return DB::table('sale_items')
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->leftJoin('items', 'items.id', '=', 'sale_items.item_id')
+            ->whereNull('sales.voided_at')
             ->whereBetween('sales.sold_at', $this->bounds($period))
             ->when($storeId, fn ($q) => $q->where('sales.store_id', $storeId))
             ->get([
                 'sale_items.sale_id', 'sales.store_id', 'sales.sold_by', 'sales.sold_at',
-                'sale_items.item_type', 'sale_items.item_id', 'items.name as item_name',
+                'sale_items.item_type', 'sale_items.item_id', 'items.name as item_name', 'items.sell_category',
                 'sale_items.qty', 'sale_items.line_total',
             ])
             ->map(function ($row) {
@@ -218,6 +223,7 @@ class BranchPerformanceService
     private function revenueByStore(array $period, ?int $storeId = null): Collection
     {
         return DB::table('sales')
+            ->whereNull('voided_at')
             ->whereBetween('sold_at', $this->bounds($period))
             ->when($storeId, fn ($q) => $q->where('store_id', $storeId))
             ->selectRaw('store_id, SUM(total) as revenue')
@@ -231,6 +237,7 @@ class BranchPerformanceService
         $revenue = (float) $sales->sum('total');
         $plates = $items->where('item_type', SaleItem::TYPE_PLATE);
         $drinks = $items->where('item_type', SaleItem::TYPE_DRINK);
+        $others = $items->where('item_type', SaleItem::TYPE_ITEM);
         $count = $sales->count();
 
         return [
@@ -245,6 +252,9 @@ class BranchPerformanceService
             'plate_revenue' => (float) $plates->sum('line_total'),
             'drinks_sold' => (float) $drinks->sum('qty'),
             'drink_revenue' => (float) $drinks->sum('line_total'),
+            // Sold on their own, not drinks: eggs, tea...
+            'items_sold' => (float) $others->sum('qty'),
+            'item_revenue' => (float) $others->sum('line_total'),
         ];
     }
 
@@ -332,6 +342,23 @@ class BranchPerformanceService
             ->values();
     }
 
+    /** Every drink and other item sold on its own, with its menu category. */
+    private function menuItems(Collection $items): Collection
+    {
+        return $items->where('item_type', '!=', SaleItem::TYPE_PLATE)
+            ->groupBy('item_id')
+            ->map(fn ($g, $itemId) => [
+                'item_id' => (int) $itemId,
+                'name' => $g->first()->item_name ?? 'Unknown',
+                'category' => $g->first()->sell_category
+                    ?? ($g->first()->item_type === SaleItem::TYPE_DRINK ? 'Drinks' : 'Other'),
+                'qty' => (float) $g->sum('qty'),
+                'revenue' => (float) $g->sum('line_total'),
+            ])
+            ->sortByDesc('revenue')
+            ->values();
+    }
+
     private function drinks(Collection $items): Collection
     {
         return $items->where('item_type', SaleItem::TYPE_DRINK)
@@ -399,6 +426,7 @@ class BranchPerformanceService
             ->leftJoin('users', 'users.id', '=', 'sales.sold_by')
             ->leftJoin('customers', 'customers.id', '=', 'sales.customer_id')
             ->where('sales.store_id', $storeId)
+            ->whereNull('sales.voided_at')
             ->whereBetween('sales.sold_at', $this->bounds($period))
             ->orderByDesc('sales.sold_at')
             ->orderByDesc('sales.id')

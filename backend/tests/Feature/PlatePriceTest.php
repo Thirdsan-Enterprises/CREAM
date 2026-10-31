@@ -24,7 +24,7 @@ class PlatePriceTest extends TestCase
     {
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN, 'store_id' => null]);
 
-        $this->actingAs($admin)->patchJson('/api/plate-price', ['price' => 27000])->assertCreated();
+        $this->actingAs($admin)->patchJson('/api/plate-price', ['price' => 27000, 'reason' => 'New year prices'])->assertCreated();
 
         $this->actingAs($admin)->getJson('/api/plate-price')->assertJson(['price' => 27000]);
     }
@@ -34,8 +34,8 @@ class PlatePriceTest extends TestCase
         $store = Store::factory()->create();
         $admin = User::factory()->create(['role' => User::ROLE_ADMIN, 'store_id' => null]);
 
-        $this->actingAs($admin)->patchJson('/api/plate-price', ['price' => 27000])->assertCreated();
-        $this->actingAs($admin)->patchJson('/api/plate-price', ['price' => 30000, 'store_id' => $store->id])->assertCreated();
+        $this->actingAs($admin)->patchJson('/api/plate-price', ['price' => 27000, 'reason' => 'New year prices'])->assertCreated();
+        $this->actingAs($admin)->patchJson('/api/plate-price', ['price' => 30000, 'store_id' => $store->id, 'reason' => 'Branch price'])->assertCreated();
 
         $this->actingAs($admin)->getJson("/api/plate-price?store_id={$store->id}")->assertJson(['price' => 30000]);
     }
@@ -45,6 +45,6 @@ class PlatePriceTest extends TestCase
         $store = Store::factory()->create();
         $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
 
-        $this->actingAs($cashier)->patchJson('/api/plate-price', ['price' => 27000])->assertStatus(403);
+        $this->actingAs($cashier)->patchJson('/api/plate-price', ['price' => 27000, 'reason' => 'x'])->assertStatus(403);
     }
 }

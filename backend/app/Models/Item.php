@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'unit', 'category', 'is_drink', 'is_active'])]
+#[Fillable(['name', 'unit', 'category', 'is_drink', 'is_sellable', 'sell_category', 'tracks_stock', 'is_active'])]
 class Item extends Model
 {
     use HasFactory;
@@ -16,6 +16,8 @@ class Item extends Model
     {
         return [
             'is_drink' => 'boolean',
+            'is_sellable' => 'boolean',
+            'tracks_stock' => 'boolean',
             'is_active' => 'boolean',
         ];
     }

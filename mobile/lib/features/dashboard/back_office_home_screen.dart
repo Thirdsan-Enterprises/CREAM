@@ -6,6 +6,7 @@ import '../../core/auth/auth_session.dart';
 import '../../core/auth/store.dart';
 import '../../core/theme/app_theme.dart';
 import '../branches/branches_screen.dart';
+import '../changes/changes_screen.dart';
 import '../catering/catering_screen.dart';
 import '../customers/back_office_customers_screen.dart';
 import '../reports/reports_screen.dart';
@@ -24,6 +25,7 @@ const _sections = [
   ('Catering', Icons.celebration_outlined, CateringScreen()),
   ('Customers', Icons.people_outline, BackOfficeCustomersScreen()),
   ('Reports', Icons.bar_chart_outlined, ReportsScreen()),
+  ('Changes', Icons.history, ChangesScreen()),
   ('Settings', Icons.settings_outlined, SettingsScreen()),
 ];
 

@@ -65,7 +65,9 @@ class BranchTotals {
       platesSold = _num(json['plates_sold']),
       plateRevenue = _num(json['plate_revenue']),
       drinksSold = _num(json['drinks_sold']),
-      drinkRevenue = _num(json['drink_revenue']);
+      drinkRevenue = _num(json['drink_revenue']),
+      itemsSold = _num(json['items_sold']),
+      itemRevenue = _num(json['item_revenue']);
 
   final double revenue;
   final double previousRevenue;
@@ -78,6 +80,10 @@ class BranchTotals {
   final double plateRevenue;
   final double drinksSold;
   final double drinkRevenue;
+
+  /// Breakfast and other menu items, besides plates and drinks.
+  final double itemsSold;
+  final double itemRevenue;
 }
 
 /// One bar of a daily or hourly series. [byStore] is only filled on the
@@ -165,6 +171,7 @@ class NamedAmount {
     required this.revenue,
     required this.count,
     this.extra = 0,
+    this.category,
   });
 
   final String name;
@@ -175,6 +182,9 @@ class NamedAmount {
 
   /// Plates sold, for cashiers.
   final double extra;
+
+  /// Menu heading, for items sold ("Drinks", "Breakfast").
+  final String? category;
 }
 
 class StockUse {
@@ -251,12 +261,16 @@ class BranchDetail {
           extra: _num(m['plates_sold']),
         );
       }).toList(),
-      drinks = (json['drinks'] as List<dynamic>).map((e) {
+      // Everything sold besides plates; older servers only list drinks.
+      drinks = ((json['menu_items'] ?? json['drinks']) as List<dynamic>).map((
+        e,
+      ) {
         final m = e as Map<String, dynamic>;
         return NamedAmount(
           name: m['name'] as String,
           revenue: _num(m['revenue']),
           count: _num(m['qty']),
+          category: m['category'] as String? ?? 'Drinks',
         );
       }).toList(),
       stockUsed = (json['stock_used'] as List<dynamic>)

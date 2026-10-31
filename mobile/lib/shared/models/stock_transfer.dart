@@ -5,6 +5,7 @@ class StockTransferItem {
     required this.itemName,
     required this.qtyDispatched,
     required this.qtyReceived,
+    this.unit = '',
   });
 
   factory StockTransferItem.fromJson(Map<String, dynamic> json) =>
@@ -13,6 +14,7 @@ class StockTransferItem {
         itemId: json['item_id'] as int,
         itemName:
             (json['item'] as Map<String, dynamic>?)?['name'] as String? ?? '',
+        unit: (json['item'] as Map<String, dynamic>?)?['unit'] as String? ?? '',
         qtyDispatched: double.parse(json['qty_dispatched'].toString()),
         qtyReceived: json['qty_received'] == null
             ? null
@@ -24,6 +26,7 @@ class StockTransferItem {
   final String itemName;
   final double qtyDispatched;
   final double? qtyReceived;
+  final String unit;
 }
 
 class StockTransfer {
@@ -36,6 +39,9 @@ class StockTransfer {
     required this.status,
     required this.dispatchedAt,
     required this.items,
+    this.dispatchedByName,
+    this.confirmedByName,
+    this.confirmedAt,
   });
 
   factory StockTransfer.fromJson(Map<String, dynamic> json) => StockTransfer(
@@ -51,6 +57,13 @@ class StockTransfer {
     items: (json['items'] as List<dynamic>? ?? [])
         .map((e) => StockTransferItem.fromJson(e as Map<String, dynamic>))
         .toList(),
+    dispatchedByName:
+        (json['dispatched_by'] as Map<String, dynamic>?)?['name'] as String?,
+    confirmedByName:
+        (json['confirmed_by'] as Map<String, dynamic>?)?['name'] as String?,
+    confirmedAt: json['confirmed_at'] == null
+        ? null
+        : DateTime.parse(json['confirmed_at'] as String),
   );
 
   final int id;
@@ -61,4 +74,9 @@ class StockTransfer {
   final String status;
   final DateTime dispatchedAt;
   final List<StockTransferItem> items;
+  final String? dispatchedByName;
+  final String? confirmedByName;
+  final DateTime? confirmedAt;
+
+  bool get isReceived => status != 'dispatched';
 }

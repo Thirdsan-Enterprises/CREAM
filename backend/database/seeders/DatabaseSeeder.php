@@ -104,7 +104,10 @@ class DatabaseSeeder extends Seeder
         ] as $drink) {
             $item = Item::firstOrCreate(
                 ['name' => $drink['name']],
-                ['unit' => 'bottle', 'is_drink' => true, 'is_active' => true],
+                [
+                    'unit' => 'bottle', 'is_drink' => true, 'is_active' => true,
+                    'is_sellable' => true, 'sell_category' => 'Drinks', 'tracks_stock' => true,
+                ],
             );
 
             DrinkPrice::firstOrCreate(

@@ -1,7 +1,7 @@
 class SaleLine {
   SaleLine({required this.itemType, this.itemId, required this.qty});
 
-  final String itemType; // 'plate' or 'drink'
+  final String itemType; // 'plate', 'drink' or 'item'
   final int? itemId;
   final double qty;
 
@@ -18,6 +18,7 @@ class SaleSummary {
     required this.totalRevenue,
     required this.plateRevenue,
     required this.drinkRevenue,
+    this.itemRevenue = 0,
     required this.platesSold,
     required this.byPaymentMethod,
   });
@@ -27,6 +28,7 @@ class SaleSummary {
     totalRevenue: (json['total_revenue'] as num).toDouble(),
     plateRevenue: (json['plate_revenue'] as num).toDouble(),
     drinkRevenue: (json['drink_revenue'] as num).toDouble(),
+    itemRevenue: (json['item_revenue'] as num?)?.toDouble() ?? 0,
     platesSold: (json['plates_sold'] as num).toDouble(),
     byPaymentMethod: _asStringDoubleMap(json['by_payment_method']),
   );
@@ -35,6 +37,9 @@ class SaleSummary {
   final double totalRevenue;
   final double plateRevenue;
   final double drinkRevenue;
+
+  /// Breakfast and other menu items sold besides plates and drinks.
+  final double itemRevenue;
   final double platesSold;
   final Map<String, double> byPaymentMethod;
 }

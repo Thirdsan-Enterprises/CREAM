@@ -9,6 +9,8 @@ import '../../core/auth/auth_session.dart';
 import '../../core/auth/store.dart';
 import '../../shared/formatters/date_formatter.dart';
 import '../../shared/models/item.dart';
+import 'stock_requests.dart';
+import 'transfers_list.dart';
 
 /// Sentinel shown as the first dropdown entry so an item that isn't in the
 /// list yet can be created without leaving the Stocking screen (Settings >
@@ -182,7 +184,7 @@ class _ItemPickerSheetState extends State<_ItemPickerSheet> {
 String _movementLabel(String type) => switch (type) {
   'purchase' => 'Bought',
   'transfer_out' => 'Sent to a branch',
-  'transfer_in' => 'Received from Kira',
+  'transfer_in' => 'Received from procurement',
   'consumption' => 'Used / sold',
   'adjustment' => 'Corrected',
   _ => type,
@@ -194,22 +196,34 @@ class StockingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 6,
       child: Column(
         children: [
           Material(
             color: Theme.of(context).scaffoldBackgroundColor,
             child: const TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
               tabs: [
+                Tab(text: 'Requests'),
                 Tab(text: 'Purchase'),
-                Tab(text: 'Transfer'),
+                Tab(text: 'Send to branch'),
+                Tab(text: 'Transfers'),
+                Tab(text: 'Branch stock'),
                 Tab(text: 'History'),
               ],
             ),
           ),
           const Expanded(
             child: TabBarView(
-              children: [_PurchaseTab(), _TransferTab(), _HistoryTab()],
+              children: [
+                ProcurementRequestsTab(),
+                _PurchaseTab(),
+                _TransferTab(),
+                TransfersListTab(),
+                BranchStockTab(),
+                _HistoryTab(),
+              ],
             ),
           ),
         ],
@@ -446,11 +460,12 @@ class _TransferTab extends ConsumerStatefulWidget {
 
 class _TransferTabState extends ConsumerState<_TransferTab> {
   late Future<void> _future;
-  // Only items Kira actually has on hand — you can't dispatch what isn't
+  // Only items the procurement unit actually has on hand — you can't dispatch what isn't
   // there. New items get their first stock via the Purchase tab, not here.
   List<Item> _items = [];
   Map<int, double> _balances = {};
   List<Store> _outlets = [];
+  String _mainName = 'procurement';
   Store? _toStore;
   final List<_TransferLine> _lines = [_TransferLine()];
   bool _submitting = false;
@@ -479,7 +494,8 @@ class _TransferTabState extends ConsumerState<_TransferTab> {
     setState(() {
       _items = inStock;
       _balances = balances;
-      _outlets = stores.where((s) => !s.isMain).toList();
+      _outlets = stores.where((s) => !s.isMain && s.isActive).toList();
+      _mainName = kira.name;
     });
   }
 
@@ -500,9 +516,13 @@ class _TransferTabState extends ConsumerState<_TransferTab> {
           .read(stockRepositoryProvider)
           .dispatchTransfer(toStoreId: _toStore!.id, items: items);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Transfer dispatched.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Sent to ${_toStore!.name}. They confirm it when it arrives.',
+          ),
+        ),
+      );
       setState(() {
         _lines
           ..clear()
@@ -534,7 +554,7 @@ class _TransferTabState extends ConsumerState<_TransferTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Dispatch from Kira',
+                'Send from $_mainName',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 16),
@@ -556,7 +576,7 @@ class _TransferTabState extends ConsumerState<_TransferTab> {
                       Expanded(
                         flex: 2,
                         child: _items.isEmpty
-                            ? const Text('Kira has no stocked items yet.')
+                            ? Text('$_mainName has no stock yet.')
                             : DropdownButtonFormField<Item>(
                                 initialValue: line.item,
                                 decoration: const InputDecoration(
@@ -600,7 +620,7 @@ class _TransferTabState extends ConsumerState<_TransferTab> {
                         width: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Dispatch transfer'),
+                    : const Text('Send'),
               ),
             ],
           ),
