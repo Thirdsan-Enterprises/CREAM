@@ -305,7 +305,10 @@ class _NewRequestSheetState extends ConsumerState<_NewRequestSheet> {
       setState(() {
         _items = food;
         _loading = false;
-        for (final item in food.where((i) => i.needsReorder)) {
+        // Only items with a re-order level set get a suggested quantity.
+        for (final item in food.where(
+          (i) => i.needsReorder && i.safetyStock > 0,
+        )) {
           // Suggest enough to get back to twice the re-order level.
           final suggest = (item.safetyStock * 2 - item.balance).clamp(
             1,

@@ -9,7 +9,7 @@ async function newUser(page, name, phone, password, role, store) {
   await L.type(page, 'Phone', phone);
   await L.type(page, 'Password', password);
   await pick(page, /^Role/, role);
-  await pick(page, /^Branch/, store);
+  if (store) await pick(page, /^Branch/, store);
 }
 
 (async () => {
@@ -27,12 +27,13 @@ async function newUser(page, name, phone, password, role, store) {
   await L.tap(page, 'Create user', { exact: true, wait: 1800 });
   await newUser(page, 'Sarah Auma', '0771000002', 'lugogo-cashier', 'Cashier', 'Lugogo');
   await L.tap(page, 'Create user', { exact: true, wait: 1800 });
-  await newUser(page, 'Tom Okello', '0771000003', 'kira-storekeeper', 'Storekeeper', 'Kira (Main/Warehouse)');
+  await newUser(page, 'Tom Okello', '0771000003', 'kira-storekeeper', 'Procurement', null);
   await L.tap(page, 'Create user', { exact: true, wait: 1800 });
   await L.shot(page, '05-users-list');
 
   // Stock food at Kira
   await L.goTo(page, 'Stocking');
+  await L.tap(page, 'Purchase', { exact: true });
   await L.shot(page, '06-stock-in');
   await L.chooseItem(page, 'Rice');
   await L.type(page, 'Quantity purchased', '100');
@@ -51,7 +52,7 @@ async function newUser(page, name, phone, password, role, store) {
   await L.shot(page, '10-new-item-stocked');
 
   // Transfer
-  await L.tap(page, 'Transfer', { exact: true });
+  await L.tap(page, 'Send to branch', { exact: true });
   await pick(page, /^To branch/, 'Lugogo');
   await pick(page, /^Item/, /^Rice/);
   await L.type(page, 'Qty', '40');
@@ -59,7 +60,7 @@ async function newUser(page, name, phone, password, role, store) {
   await pick(page, /^Item/, /^Sugar/, 1);
   await L.type(page, 'Qty', '20', 1);
   await L.shot(page, '11-transfer');
-  await L.tap(page, 'Dispatch transfer', { exact: true, wait: 1500 });
+  await L.tap(page, 'Send', { exact: true, wait: 1500 });
   await L.shot(page, '12-transfer-dispatched');
   await L.tap(page, 'History', { exact: true, wait: 1500 });
   await L.shot(page, '13-history');

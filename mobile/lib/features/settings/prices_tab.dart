@@ -595,7 +595,7 @@ class _PriceSheetState extends State<_PriceSheet> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(
-                  labelText: 'Price (UGX)',
+                  labelText: 'Price',
                   prefixText: 'UGX ',
                 ),
               ),

@@ -102,8 +102,9 @@ class LedgerEntry {
     amount: double.parse(json['amount'].toString()),
     note: json['note'] as String?,
     occurredAt: DateTime.parse(json['occurred_at'] as String),
-    recordedByName:
-        (json['recorded_by'] as Map<String, dynamic>?)?['name'] as String?,
+    recordedByName: (json['recorded_by'] is Map
+        ? json['recorded_by']['name'] as String?
+        : null),
   );
 
   final int id;

@@ -31,7 +31,7 @@ class EditLogEntry {
     return EditLogEntry(
       id: json['id'] as int,
       userName:
-          (json['user'] as Map<String, dynamic>?)?['name'] as String? ?? '',
+          (json['user'] is Map ? json['user']['name'] as String? : null) ?? '',
       storeName: (json['store'] as Map<String, dynamic>?)?['name'] as String?,
       subjectType: json['subject_type'] as String,
       subjectLabel: json['subject_label'] as String,

@@ -122,7 +122,8 @@ class SaleRecord {
     storeName:
         (json['store'] as Map<String, dynamic>?)?['name'] as String? ?? '',
     soldByName:
-        (json['sold_by'] as Map<String, dynamic>?)?['name'] as String? ?? '',
+        (json['sold_by'] is Map ? json['sold_by']['name'] as String? : null) ??
+        '',
     customerName:
         (json['customer'] as Map<String, dynamic>?)?['name'] as String?,
     paymentMethod: json['payment_method'] as String,
@@ -134,8 +135,9 @@ class SaleRecord {
     voidedAt: json['voided_at'] == null
         ? null
         : DateTime.parse(json['voided_at'] as String),
-    voidedByName:
-        (json['voided_by'] as Map<String, dynamic>?)?['name'] as String?,
+    voidedByName: (json['voided_by'] is Map
+        ? json['voided_by']['name'] as String?
+        : null),
     voidReason: json['void_reason'] as String?,
   );
 
