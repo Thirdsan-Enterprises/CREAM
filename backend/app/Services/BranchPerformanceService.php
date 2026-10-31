@@ -51,7 +51,8 @@ class BranchPerformanceService
 
         $storeIds = $sales->pluck('store_id')->unique();
         $stores = Store::query()
-            ->where(fn ($q) => $q->where('is_active', true)->orWhereIn('id', $storeIds))
+            // A procurement unit that does not sell is not a branch here.
+            ->where(fn ($q) => $q->where(fn ($q) => $q->where('is_active', true)->where('sells', true))->orWhereIn('id', $storeIds))
             ->orderByDesc('is_main')
             ->orderBy('name')
             ->get();

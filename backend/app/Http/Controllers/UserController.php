@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Store;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
@@ -29,6 +31,7 @@ class UserController extends Controller
         ]);
 
         $data['password'] = bcrypt($data['password']);
+        $data = $this->placeProcurementStaff($data);
 
         return response()->json(User::create($data)->load('store'), 201);
     }
@@ -50,9 +53,29 @@ class UserController extends Controller
         if (isset($data['password'])) {
             $data['password'] = bcrypt($data['password']);
         }
+        if (($data['role'] ?? $user->role) === User::ROLE_STOREKEEPER) {
+            $data = $this->placeProcurementStaff([...$data, 'role' => User::ROLE_STOREKEEPER]);
+        }
 
         $user->update($data);
 
         return $user->load('store');
+    }
+
+    /**
+     * Procurement staff (role storekeeper) always work at the procurement
+     * unit, whichever store the form sent.
+     */
+    private function placeProcurementStaff(array $data): array
+    {
+        if ($data['role'] === User::ROLE_STOREKEEPER) {
+            $main = Store::main();
+            if (! $main) {
+                throw ValidationException::withMessages(['store_id' => ['Choose the procurement unit in Settings > Branches first.']]);
+            }
+            $data['store_id'] = $main->id;
+        }
+
+        return $data;
     }
 }

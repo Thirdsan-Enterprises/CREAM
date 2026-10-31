@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Item;
 use App\Models\StockMovement;
 use App\Models\StockTransfer;
 use App\Models\Store;
 use App\Services\StockService;
+use App\Services\TransferService;
 use App\Support\StoreScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,7 +14,10 @@ use Illuminate\Validation\ValidationException;
 
 class StockTransferController extends Controller
 {
-    public function __construct(private readonly StockService $stockService) {}
+    public function __construct(
+        private readonly StockService $stockService,
+        private readonly TransferService $transferService,
+    ) {}
 
     public function index(Request $request)
     {
@@ -62,47 +65,10 @@ class StockTransferController extends Controller
         $fromStore = Store::where('is_main', true)->firstOrFail();
 
         if (! $user->isAdmin() && $user->store_id !== $fromStore->id) {
-            abort(403, 'Only the main store can dispatch transfers.');
+            abort(403, 'Only the procurement unit can send stock to branches.');
         }
 
-        foreach ($data['items'] as $line) {
-            $balance = $this->stockService->balance($line['item_id'], $fromStore->id);
-            if ($line['qty'] > $balance) {
-                $item = Item::find($line['item_id']);
-                throw ValidationException::withMessages([
-                    'items' => ["Only {$balance} {$item?->unit} of {$item?->name} available at {$fromStore->name} — cannot dispatch {$line['qty']}."],
-                ]);
-            }
-        }
-
-        $transfer = DB::transaction(function () use ($data, $fromStore, $user) {
-            $transfer = StockTransfer::create([
-                'from_store_id' => $fromStore->id,
-                'to_store_id' => $data['to_store_id'],
-                'status' => StockTransfer::STATUS_DISPATCHED,
-                'dispatched_by' => $user->id,
-                'dispatched_at' => now(),
-            ]);
-
-            foreach ($data['items'] as $line) {
-                $transfer->items()->create([
-                    'item_id' => $line['item_id'],
-                    'qty_dispatched' => $line['qty'],
-                ]);
-
-                StockMovement::create([
-                    'item_id' => $line['item_id'],
-                    'store_id' => $fromStore->id,
-                    'type' => StockMovement::TYPE_TRANSFER_OUT,
-                    'qty' => -abs($line['qty']),
-                    'related_transfer_id' => $transfer->id,
-                    'user_id' => $user->id,
-                    'occurred_at' => now(),
-                ]);
-            }
-
-            return $transfer;
-        });
+        $transfer = $this->transferService->dispatch($user, $fromStore, (int) $data['to_store_id'], $data['items']);
 
         return response()->json($transfer->load('items.item'), 201);
     }

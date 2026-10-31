@@ -85,6 +85,12 @@ class SaleController extends Controller
 
         $storeId = StoreScope::resolveRequired($user, $data['store_id'] ?? null);
         StoreScope::assertAccess($user, $storeId);
+        $store = Store::findOrFail($storeId);
+        if (! $store->sells) {
+            throw ValidationException::withMessages([
+                'store_id' => ["{$store->name} is the procurement unit and does not sell. Choose a branch."],
+            ]);
+        }
 
         $customer = null;
         if ($data['payment_method'] === Sale::PAYMENT_ACCOUNT) {

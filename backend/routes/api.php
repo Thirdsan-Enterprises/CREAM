@@ -14,6 +14,7 @@ use App\Http\Controllers\PriceListController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\StockMovementController;
+use App\Http\Controllers\StockRequestController;
 use App\Http\Controllers\StockTransferController;
 use App\Http\Controllers\StoreController;
 use App\Http\Controllers\UserController;
@@ -38,6 +39,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/plate-price', [PlatePriceController::class, 'show']);
     Route::get('/drinks', [DrinkController::class, 'index']);
     Route::get('/menu', [MenuController::class, 'index']);
+
+    Route::get('/stock-requests', [StockRequestController::class, 'index']);
+    Route::post('/stock-requests', [StockRequestController::class, 'store']);
+    Route::get('/stock-requests/{stockRequest}', [StockRequestController::class, 'show']);
+    Route::post('/stock-requests/{stockRequest}/send', [StockRequestController::class, 'send']);
+    Route::post('/stock-requests/{stockRequest}/decline', [StockRequestController::class, 'decline']);
+    Route::post('/stock-requests/{stockRequest}/cancel', [StockRequestController::class, 'cancel']);
 
     Route::get('/sales', [SaleController::class, 'index']);
     Route::get('/sales/summary', [SaleController::class, 'summary']);
@@ -90,7 +98,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/catering-orders/{cateringOrder}/payments', [CateringOrderController::class, 'addPayment']);
 
         Route::get('/reports/dashboard', [ReportController::class, 'dashboard']);
-        Route::get('/reports/stock-status', [ReportController::class, 'stockStatus']);
         Route::get('/reports/outstanding-credit', [ReportController::class, 'outstandingCredit']);
         Route::get('/reports/catering-pipeline', [ReportController::class, 'cateringPipeline']);
         Route::get('/reports/branches', [BranchReportController::class, 'index']);
@@ -98,6 +105,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STOREKEEPER.','.User::ROLE_STORE_MANAGER)->group(function () {
         Route::post('/stock/purchase', [StockMovementController::class, 'purchase']);
+        // Every branch's stock at a glance, for deciding what to send.
+        Route::get('/reports/stock-status', [ReportController::class, 'stockStatus']);
         Route::post('/transfers', [StockTransferController::class, 'store']);
         Route::post('/transfers/{transfer}/confirm', [StockTransferController::class, 'confirm']);
     });

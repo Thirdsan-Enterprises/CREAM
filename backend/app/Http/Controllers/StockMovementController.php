@@ -18,8 +18,14 @@ class StockMovementController extends Controller
 
     public function status(Request $request)
     {
-        $storeId = StoreScope::resolveRequired($request->user(), $request->integer('store_id') ?: null);
-        StoreScope::assertAccess($request->user(), $storeId);
+        $user = $request->user();
+        // Procurement looks at any branch's stock to decide what to send.
+        if ($user->isProcurement() && $request->filled('store_id')) {
+            $storeId = $request->integer('store_id');
+        } else {
+            $storeId = StoreScope::resolveRequired($user, $request->integer('store_id') ?: null);
+            StoreScope::assertAccess($user, $storeId);
+        }
 
         return response()->json([
             'store_id' => $storeId,

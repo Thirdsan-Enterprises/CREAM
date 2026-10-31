@@ -6,6 +6,7 @@ use App\Models\CateringOrder;
 use App\Models\Customer;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\StockRequest;
 use App\Models\Store;
 use App\Services\CustomerStanding;
 use App\Services\StockService;
@@ -36,11 +37,17 @@ class ReportController extends Controller
             'upcoming_catering' => $this->upcomingCateringOrders(7),
             'total_outstanding_credit' => $this->totalOutstandingCredit(),
             'accounts_needing_attention' => $this->accountsNeedingAttention(),
+            'open_stock_requests' => StockRequest::where('status', StockRequest::STATUS_OPEN)->count(),
         ]);
     }
 
-    public function stockStatus()
+    public function stockStatus(Request $request)
     {
+        $user = $request->user();
+        if (! $user->isAdmin() && ! $user->isProcurement()) {
+            abort(403, 'Only the owner and the procurement unit see every branch\'s stock.');
+        }
+
         $stores = Store::query()->where('is_active', true)->get();
 
         return response()->json(
