@@ -39,6 +39,11 @@ class CustomerController extends Controller
         if ($user->isAdmin()) {
             if ($request->filled('store_id')) {
                 $query->where('store_id', $request->integer('store_id'));
+            } elseif ($request->filled('available_at')) {
+                // The owner selling on behalf of a branch: the customers that
+                // branch can charge.
+                $branch = $request->integer('available_at');
+                $query->where(fn ($q) => $q->where('store_id', $branch)->orWhereNull('store_id'));
             }
         } else {
             $query->where(fn ($q) => $q->where('store_id', $user->store_id)->orWhereNull('store_id'));

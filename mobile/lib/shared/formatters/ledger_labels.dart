@@ -3,6 +3,6 @@
 String ledgerEntryLabel(String type) => switch (type) {
   'deposit' => 'Top-up',
   'sale_debit' => 'Meal charged',
-  'adjustment' => 'Adjustment',
+  'adjustment' => 'Correction',
   _ => type,
 };

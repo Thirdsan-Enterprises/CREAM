@@ -10,6 +10,7 @@ import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/models/customer.dart';
 import '../../shared/models/item.dart';
 import '../../shared/models/sale.dart';
+import '../customers/customers_view.dart';
 
 class _MenuLine {
   _MenuLine(this.entry, this.qty);
@@ -96,6 +97,7 @@ class _SellScreenState extends ConsumerState<SellScreen> {
   String _paymentMethod = 'cash';
   Customer? _selectedCustomer;
   double? _selectedCustomerBalance;
+  AccountStanding? _selectedStanding;
   bool _loadingCustomerBalance = false;
   bool _submitting = false;
 
@@ -213,22 +215,26 @@ class _SellScreenState extends ConsumerState<SellScreen> {
     final customer = await showModalBottomSheet<Customer>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => const _CustomerSearchSheet(),
+      builder: (context) => _CustomerSearchSheet(storeId: widget.storeId),
     );
     if (customer == null) return;
 
     setState(() {
       _selectedCustomer = customer;
       _selectedCustomerBalance = null;
+      _selectedStanding = null;
       _loadingCustomerBalance = true;
     });
 
     try {
-      final balance = await ref
+      final standing = await ref
           .read(customersRepositoryProvider)
-          .balance(customer.id);
+          .standing(customer.id);
       if (!mounted || _selectedCustomer?.id != customer.id) return;
-      setState(() => _selectedCustomerBalance = balance);
+      setState(() {
+        _selectedCustomerBalance = standing.balance;
+        _selectedStanding = standing;
+      });
     } catch (_) {
       // Balance is a convenience preview only — the server re-checks it
       // authoritatively on submit, so a fetch failure here isn't fatal.
@@ -280,7 +286,7 @@ class _SellScreenState extends ConsumerState<SellScreen> {
           ),
       ];
 
-      await ref
+      final result = await ref
           .read(salesRepositoryProvider)
           .createSale(
             paymentMethod: _paymentMethod,
@@ -296,8 +302,36 @@ class _SellScreenState extends ConsumerState<SellScreen> {
           backgroundColor: AppColors.success,
         ),
       );
+      // An account that is now near or at its limit: say so while the
+      // customer is still at the counter.
+      final account = result['customer_account'];
+      if (account is Map<String, dynamic>) {
+        final standing = AccountStanding.fromJson(account);
+        if (standing.warning != null) {
+          showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              icon: Icon(
+                standing.isBlocked ? Icons.block : Icons.warning_amber,
+                color: standing.isBlocked
+                    ? AppColors.danger
+                    : const Color(0xFFB7791F),
+              ),
+              title: const Text('Sale completed'),
+              content: Text(standing.warning!),
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+      }
       setState(() {
         _plateQty = 0;
+        _selectedStanding = null;
         _lines.clear();
         _paymentMethod = 'cash';
         _selectedCustomer = null;
@@ -470,9 +504,23 @@ class _SellScreenState extends ConsumerState<SellScreen> {
                                       ),
                                     ),
                                   )
-                                : _CustomerAvailabilityNotice(
-                                    available: _selectedCustomerAvailable,
-                                    total: _total,
+                                : Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      _CustomerAvailabilityNotice(
+                                        available: _selectedCustomerAvailable,
+                                        total: _total,
+                                      ),
+                                      if (_selectedStanding != null &&
+                                          _selectedStanding!.status !=
+                                              'ok') ...[
+                                        const SizedBox(height: 8),
+                                        StandingBanner(
+                                          standing: _selectedStanding!,
+                                        ),
+                                      ],
+                                    ],
                                   ),
                           ),
                       ],
@@ -659,7 +707,10 @@ class _MenuTile extends StatelessWidget {
 }
 
 class _CustomerSearchSheet extends ConsumerStatefulWidget {
-  const _CustomerSearchSheet();
+  const _CustomerSearchSheet({this.storeId});
+
+  /// The branch the owner is selling for; null for staff.
+  final int? storeId;
 
   @override
   ConsumerState<_CustomerSearchSheet> createState() =>
@@ -671,10 +722,18 @@ class _CustomerSearchSheetState extends ConsumerState<_CustomerSearchSheet> {
   List<Customer> _results = [];
   bool _searching = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _search('');
+  }
+
   Future<void> _search(String query) async {
     setState(() => _searching = true);
     try {
-      final results = await ref.read(customersRepositoryProvider).search(query);
+      final results = await ref
+          .read(customersRepositoryProvider)
+          .search(query, availableAt: widget.storeId);
       if (mounted) setState(() => _results = results);
     } finally {
       if (mounted) setState(() => _searching = false);
@@ -718,7 +777,11 @@ class _CustomerSearchSheetState extends ConsumerState<_CustomerSearchSheet> {
                   for (final customer in _results)
                     ListTile(
                       title: Text(customer.name),
-                      subtitle: Text(customer.phone),
+                      subtitle: Text(
+                        '${customer.phone} · ${customer.accountTypeLabel}',
+                      ),
+                      trailing: StandingBadge(customer: customer),
+                      enabled: customer.isActive,
                       onTap: () => Navigator.of(context).pop(customer),
                     ),
                 ],

@@ -71,6 +71,38 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 label: 'Total outstanding credit',
                 value: CurrencyFormatter.format(data.totalOutstandingCredit),
               ),
+              if (data.accountsNeedingAttention.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Text(
+                  'Accounts near their limit (${data.accountsNeedingAttention.length})',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: Column(
+                    children: [
+                      for (final alert in data.accountsNeedingAttention.take(8))
+                        ListTile(
+                          dense: true,
+                          leading: Icon(
+                            alert.status == 'blocked'
+                                ? Icons.block
+                                : Icons.warning_amber,
+                            color: alert.status == 'blocked'
+                                ? AppColors.danger
+                                : AppColors.gold,
+                          ),
+                          title: Text(
+                            alert.storeName == null
+                                ? alert.name
+                                : '${alert.name} · ${alert.storeName}',
+                          ),
+                          subtitle: Text(alert.warning),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               Text(
                 data.lowStockAlerts.isEmpty
