@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Models\EditLog;
 use App\Models\Item;
 use App\Models\ItemStoreSetting;
+use App\Models\LedgerEntry;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\StockMovement;
@@ -30,7 +32,7 @@ class SaleController extends Controller
     {
         $user = $request->user();
 
-        $query = Sale::query()->with(['store', 'soldBy', 'customer', 'items.item'])->orderByDesc('sold_at');
+        $query = Sale::query()->with(['store', 'soldBy', 'customer', 'items.item', 'voidedBy:id,name'])->orderByDesc('sold_at');
 
         $storeId = StoreScope::resolve($user, $request->integer('store_id') ?: null);
         if ($storeId !== null) {
@@ -149,6 +151,7 @@ class SaleController extends Controller
                         'store_id' => $storeId,
                         'type' => StockMovement::TYPE_CONSUMPTION,
                         'qty' => -abs($lineInput['qty']),
+                        'note' => 'Sale #'.$sale->id,
                         'user_id' => $user->id,
                         'occurred_at' => now(),
                     ]);
@@ -163,6 +166,87 @@ class SaleController extends Controller
         });
 
         return response()->json($sale->load('items.item'), 201);
+    }
+
+    /**
+     * Void a sale entered by mistake. The sale stays on record, marked with
+     * who voided it and why; what it took from stock goes back on the
+     * shelf and an account charge is credited back, in one transaction.
+     * The owner can void any sale, a store manager only at their branch.
+     */
+    public function void(Request $request, Sale $sale)
+    {
+        $user = $request->user();
+        StoreScope::assertAccess($user, $sale->store_id);
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:500'],
+        ], [
+            'reason.required' => 'Say why this sale is being voided.',
+        ]);
+
+        DB::transaction(function () use ($sale, $user, $data) {
+            $sale = Sale::whereKey($sale->id)->lockForUpdate()->firstOrFail();
+            if ($sale->isVoided()) {
+                throw ValidationException::withMessages(['sale' => ["Sale #{$sale->id} was already voided."]]);
+            }
+
+            $note = "Sale #{$sale->id} voided: ".trim($data['reason']);
+
+            $returned = StockMovement::where('type', StockMovement::TYPE_CONSUMPTION)
+                ->where('store_id', $sale->store_id)
+                ->where('note', 'Sale #'.$sale->id)
+                ->get(['item_id', 'qty'])
+                ->map(fn ($m) => ['item_id' => $m->item_id, 'qty' => abs((float) $m->qty)]);
+            if ($returned->isEmpty()) {
+                // Sales recorded before stock movements named their sale:
+                // fall back to the lines of items that count stock.
+                $returned = $sale->items()->whereNotNull('item_id')
+                    ->whereHas('item', fn ($q) => $q->where('tracks_stock', true))
+                    ->get(['item_id', 'qty'])
+                    ->map(fn ($l) => ['item_id' => $l->item_id, 'qty' => (float) $l->qty]);
+            }
+            foreach ($returned as $movement) {
+                StockMovement::create([
+                    'item_id' => $movement['item_id'],
+                    'store_id' => $sale->store_id,
+                    'type' => StockMovement::TYPE_ADJUSTMENT,
+                    'qty' => $movement['qty'],
+                    'note' => $note,
+                    'user_id' => $user->id,
+                    'occurred_at' => now(),
+                ]);
+            }
+
+            if ($sale->customer_id) {
+                LedgerEntry::create([
+                    'customer_id' => $sale->customer_id,
+                    'type' => LedgerEntry::TYPE_ADJUSTMENT,
+                    'amount' => (float) $sale->total,
+                    'related_sale_id' => $sale->id,
+                    'note' => $note,
+                    'recorded_by' => $user->id,
+                    'occurred_at' => now(),
+                ]);
+            }
+
+            $sale->update([
+                'voided_at' => now(),
+                'voided_by' => $user->id,
+                'void_reason' => trim($data['reason']),
+            ]);
+
+            EditLog::record(
+                $user, 'sale', $sale->id, "Sale #{$sale->id}", 'voided',
+                [
+                    'total' => ['from' => (float) $sale->total, 'to' => 0],
+                    'payment_method' => ['from' => $sale->payment_method, 'to' => $sale->payment_method],
+                ],
+                $data['reason'], $sale->store_id,
+            );
+        });
+
+        return response()->json($sale->fresh()->load(['items.item', 'voidedBy:id,name']));
     }
 
     /**
@@ -217,7 +301,7 @@ class SaleController extends Controller
     {
         $user = $request->user();
 
-        $query = Sale::query()->with('items');
+        $query = Sale::query()->counted()->with('items');
 
         $storeId = StoreScope::resolve($user, $request->integer('store_id') ?: null);
         if ($storeId !== null) {

@@ -30,6 +30,25 @@ class StockRepository {
     );
   }
 
+  /// Corrects a branch's balance (a count, breakage, spoilage) by [qty]:
+  /// positive adds, negative removes. The [reason] goes in the change log.
+  Future<void> correctStock({
+    required int itemId,
+    required double qty,
+    required String reason,
+    int? storeId,
+  }) {
+    return _api.post(
+      '/stock/adjustment',
+      data: {
+        'item_id': itemId,
+        'qty': qty,
+        'note': reason,
+        'store_id': ?storeId,
+      },
+    );
+  }
+
   Future<List<StockTransfer>> incomingTransfers() async {
     final body = await _api.get('/transfers', query: {'status': 'dispatched'});
     return (body['data'] as List<dynamic>)

@@ -42,6 +42,17 @@ class SalesRepository {
     return SaleSummary.fromJson(body);
   }
 
+  /// Voids a sale entered by mistake: stock goes back, an account charge
+  /// is credited back, and the sale leaves the totals. Owner or the
+  /// branch's manager only.
+  Future<SaleRecord> voidSale(int saleId, {required String reason}) async {
+    final body = await _api.post(
+      '/sales/$saleId/void',
+      data: {'reason': reason},
+    );
+    return SaleRecord.fromJson(body);
+  }
+
   Future<List<SaleRecord>> list({
     DateTime? from,
     DateTime? to,
@@ -63,33 +74,90 @@ class SalesRepository {
   }
 }
 
+class SaleRecordLine {
+  SaleRecordLine({
+    required this.name,
+    required this.qty,
+    required this.unitPrice,
+    required this.lineTotal,
+  });
+
+  factory SaleRecordLine.fromJson(Map<String, dynamic> json) {
+    final item = json['item'] as Map<String, dynamic>?;
+    return SaleRecordLine(
+      name: json['item_type'] == 'plate'
+          ? 'Plate'
+          : item?['name'] as String? ?? 'Item',
+      qty: double.parse(json['qty'].toString()),
+      unitPrice: double.parse(json['unit_price'].toString()),
+      lineTotal: double.parse(json['line_total'].toString()),
+    );
+  }
+
+  final String name;
+  final double qty;
+  final double unitPrice;
+  final double lineTotal;
+}
+
 class SaleRecord {
   SaleRecord({
     required this.id,
+    required this.storeId,
     required this.storeName,
     required this.soldByName,
     required this.paymentMethod,
     required this.total,
     required this.soldAt,
+    this.customerName,
+    this.lines = const [],
+    this.voidedAt,
+    this.voidedByName,
+    this.voidReason,
   });
 
   factory SaleRecord.fromJson(Map<String, dynamic> json) => SaleRecord(
     id: json['id'] as int,
+    storeId: json['store_id'] as int? ?? 0,
     storeName:
         (json['store'] as Map<String, dynamic>?)?['name'] as String? ?? '',
     soldByName:
         (json['sold_by'] as Map<String, dynamic>?)?['name'] as String? ?? '',
+    customerName:
+        (json['customer'] as Map<String, dynamic>?)?['name'] as String?,
     paymentMethod: json['payment_method'] as String,
     total: double.parse(json['total'].toString()),
     soldAt: DateTime.parse(json['sold_at'] as String),
+    lines: ((json['items'] as List<dynamic>?) ?? const [])
+        .map((e) => SaleRecordLine.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    voidedAt: json['voided_at'] == null
+        ? null
+        : DateTime.parse(json['voided_at'] as String),
+    voidedByName:
+        (json['voided_by'] as Map<String, dynamic>?)?['name'] as String?,
+    voidReason: json['void_reason'] as String?,
   );
 
   final int id;
+  final int storeId;
   final String storeName;
   final String soldByName;
+  final String? customerName;
   final String paymentMethod;
   final double total;
   final DateTime soldAt;
+  final List<SaleRecordLine> lines;
+  final DateTime? voidedAt;
+  final String? voidedByName;
+  final String? voidReason;
+
+  bool get isVoided => voidedAt != null;
+
+  /// "1 Plate · 2 Soda".
+  String get lineSummary => lines
+      .map((l) => '${l.qty.toStringAsFixed(l.qty % 1 == 0 ? 0 : 1)} ${l.name}')
+      .join(' · ');
 }
 
 final salesRepositoryProvider = Provider<SalesRepository>(

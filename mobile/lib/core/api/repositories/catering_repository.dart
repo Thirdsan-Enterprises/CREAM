@@ -161,11 +161,12 @@ class CateringRepository {
 
   Future<CateringPackage> updatePackagePrice(
     int packageId,
-    double pricePerPlate,
-  ) async {
+    double pricePerPlate, {
+    required String reason,
+  }) async {
     final body = await _api.patch(
       '/catering-packages/$packageId',
-      data: {'price_per_plate': pricePerPlate},
+      data: {'price_per_plate': pricePerPlate, 'reason': reason},
     );
     return CateringPackage.fromJson(body);
   }
@@ -206,6 +207,16 @@ class CateringRepository {
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       },
     );
+    return CateringOrder.fromJson(body);
+  }
+
+  /// Changes what was agreed on an order; [changes] must include a
+  /// 'reason'.
+  Future<CateringOrder> updateOrder(
+    int orderId,
+    Map<String, Object> changes,
+  ) async {
+    final body = await _api.patch('/catering-orders/$orderId', data: changes);
     return CateringOrder.fromJson(body);
   }
 

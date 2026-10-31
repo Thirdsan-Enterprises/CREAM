@@ -42,8 +42,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/sales', [SaleController::class, 'index']);
     Route::get('/sales/summary', [SaleController::class, 'summary']);
 
-    Route::get('/edit-logs', [EditLogController::class, 'index'])
-        ->middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STORE_MANAGER);
+    Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STORE_MANAGER)->group(function () {
+        Route::get('/edit-logs', [EditLogController::class, 'index']);
+        Route::post('/sales/{sale}/void', [SaleController::class, 'void']);
+    });
 
     Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STORE_MANAGER.','.User::ROLE_CASHIER)->group(function () {
         Route::post('/sales', [SaleController::class, 'store']);

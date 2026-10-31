@@ -16,7 +16,7 @@ class ReportController extends Controller
 
     public function dashboard()
     {
-        $todaySales = Sale::query()->whereDate('sold_at', now()->toDateString())->with('items')->get();
+        $todaySales = Sale::query()->counted()->whereDate('sold_at', now()->toDateString())->with('items')->get();
 
         $salesByStore = $todaySales->groupBy('store_id')->map(fn ($sales) => [
             'total' => $sales->sum('total'),

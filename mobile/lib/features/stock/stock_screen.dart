@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/api/repositories/stock_repository.dart';
+import '../../core/auth/auth_session.dart';
+import '../../core/auth/user.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/stock_transfer.dart';
 
@@ -183,6 +185,161 @@ class _BalancesTabState extends ConsumerState<_BalancesTab> {
     }
   }
 
+  bool get _canCorrect {
+    final role = ref.read(authSessionProvider).user?.role;
+    return role == UserRole.admin || role == UserRole.storeManager;
+  }
+
+  Future<void> _itemActions(StoreItemStatus item) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(
+                item.itemName,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              subtitle: Text('Balance ${item.balance.toStringAsFixed(0)}'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.outbox_outlined),
+              title: const Text('Log what was used (Stock Out)'),
+              onTap: () => Navigator.pop(context, 'use'),
+            ),
+            if (item.isDrink)
+              ListTile(
+                leading: const Icon(Icons.add_shopping_cart),
+                title: const Text('Record drinks bought'),
+                onTap: () => Navigator.pop(context, 'buy'),
+              ),
+            if (_canCorrect)
+              ListTile(
+                leading: const Icon(Icons.fact_check_outlined),
+                title: const Text('Correct the count'),
+                subtitle: const Text(
+                  'After a stock count, breakage or spoilage. Needs a reason.',
+                ),
+                onTap: () => Navigator.pop(context, 'correct'),
+              ),
+          ],
+        ),
+      ),
+    );
+    switch (action) {
+      case 'use':
+        await _logConsumption(item);
+      case 'buy':
+        await _recordPurchase(item);
+      case 'correct':
+        await _correct(item);
+    }
+  }
+
+  /// Stocktake: enter what is actually on the shelf; the difference is
+  /// recorded as a correction with the reason, and shows in Changes.
+  Future<void> _correct(StoreItemStatus item) async {
+    final countController = TextEditingController();
+    final reasonController = TextEditingController();
+    String? error;
+
+    final result = await showDialog<(double, String)>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final counted = double.tryParse(countController.text);
+          final diff = counted == null ? null : counted - item.balance;
+          return AlertDialog(
+            title: Text('Correct ${item.itemName}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('The app says ${item.balance.toStringAsFixed(0)}.'),
+                TextField(
+                  controller: countController,
+                  autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Actually on the shelf',
+                  ),
+                  onChanged: (_) => setDialogState(() {}),
+                ),
+                if (diff != null && diff != 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      diff > 0
+                          ? '${diff.toStringAsFixed(diff % 1 == 0 ? 0 : 1)} more than recorded'
+                          : '${(-diff).toStringAsFixed(diff % 1 == 0 ? 0 : 1)} fewer than recorded',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: diff > 0 ? AppColors.success : AppColors.danger,
+                      ),
+                    ),
+                  ),
+                TextField(
+                  controller: reasonController,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    labelText: 'Reason',
+                    helperText: 'e.g. 2 bottles broke, weekly count',
+                    errorText: error,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (diff == null || diff == 0) {
+                    setDialogState(
+                      () => error = 'Enter a count different from the app.',
+                    );
+                    return;
+                  }
+                  final reason = reasonController.text.trim();
+                  if (reason.isEmpty) {
+                    setDialogState(() => error = 'A reason is needed.');
+                    return;
+                  }
+                  Navigator.pop(context, (diff, reason));
+                },
+                child: const Text('Save correction'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (result == null) return;
+
+    try {
+      await ref
+          .read(stockRepositoryProvider)
+          .correctStock(itemId: item.itemId, qty: result.$1, reason: result.$2);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Stock corrected.')));
+      _reload();
+    } catch (e) {
+      if (!mounted) return;
+      final message = e is ApiException ? e.message : 'Something went wrong.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<StoreItemStatus>>(
@@ -279,7 +436,7 @@ class _BalancesTabState extends ConsumerState<_BalancesTab> {
                                   ),
                                 ],
                               ),
-                              onTap: () => _logConsumption(item),
+                              onTap: () => _itemActions(item),
                             ),
                           );
                         },

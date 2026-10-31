@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\EditLog;
 use App\Models\Item;
 use App\Models\StockMovement;
 use App\Models\Store;
 use App\Services\StockService;
 use App\Support\StoreScope;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class StockMovementController extends Controller
@@ -134,15 +136,29 @@ class StockMovementController extends Controller
         $storeId = StoreScope::resolveRequired($user, $data['store_id'] ?? null);
         StoreScope::assertAccess($user, $storeId);
 
-        $movement = StockMovement::create([
-            'item_id' => $data['item_id'],
-            'store_id' => $storeId,
-            'type' => StockMovement::TYPE_ADJUSTMENT,
-            'qty' => $data['qty'],
-            'note' => $data['note'],
-            'user_id' => $user->id,
-            'occurred_at' => $data['occurred_at'] ?? now(),
-        ]);
+        $movement = DB::transaction(function () use ($data, $storeId, $user) {
+            $before = $this->stockService->balance((int) $data['item_id'], $storeId);
+            $movement = StockMovement::create([
+                'item_id' => $data['item_id'],
+                'store_id' => $storeId,
+                'type' => StockMovement::TYPE_ADJUSTMENT,
+                'qty' => $data['qty'],
+                'note' => $data['note'],
+                'user_id' => $user->id,
+                'occurred_at' => $data['occurred_at'] ?? now(),
+            ]);
+
+            // A correction changes a balance people already counted on, so
+            // it goes in the change log too.
+            $item = Item::find($data['item_id']);
+            EditLog::record(
+                $user, 'stock', $item->id, $item->name.' at '.Store::find($storeId)->name, 'stock_corrected',
+                ['balance' => ['from' => $before, 'to' => $before + (float) $data['qty']]],
+                $data['note'], $storeId,
+            );
+
+            return $movement;
+        });
 
         return response()->json($movement, 201);
     }

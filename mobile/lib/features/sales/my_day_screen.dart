@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/repositories/sales_repository.dart';
+import '../../core/auth/auth_session.dart';
+import '../../core/auth/user.dart';
 import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/models/sale.dart';
+import '../../shared/widgets/sale_detail_sheet.dart';
 
 const _paymentLabels = {
   'cash': 'Cash',
@@ -21,7 +24,7 @@ class MyDayScreen extends ConsumerStatefulWidget {
 }
 
 class _MyDayScreenState extends ConsumerState<MyDayScreen> {
-  late Future<SaleSummary> _future;
+  late Future<(SaleSummary, List<SaleRecord>)> _future;
 
   @override
   void initState() {
@@ -29,9 +32,14 @@ class _MyDayScreenState extends ConsumerState<MyDayScreen> {
     _future = _load();
   }
 
-  Future<SaleSummary> _load() {
+  Future<(SaleSummary, List<SaleRecord>)> _load() async {
     final today = DateTime.now();
-    return ref.read(salesRepositoryProvider).summary(from: today, to: today);
+    final repo = ref.read(salesRepositoryProvider);
+    final results = await Future.wait([
+      repo.summary(from: today, to: today),
+      repo.list(from: today, to: today),
+    ]);
+    return (results[0] as SaleSummary, results[1] as List<SaleRecord>);
   }
 
   void _reload() => setState(() => _future = _load());
@@ -39,7 +47,7 @@ class _MyDayScreenState extends ConsumerState<MyDayScreen> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: FutureBuilder<SaleSummary>(
+      child: FutureBuilder<(SaleSummary, List<SaleRecord>)>(
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
@@ -49,7 +57,9 @@ class _MyDayScreenState extends ConsumerState<MyDayScreen> {
             return Center(child: Text('${snapshot.error}'));
           }
 
-          final summary = snapshot.data!;
+          final (summary, sales) = snapshot.data!;
+          final canVoid =
+              ref.read(authSessionProvider).user?.role == UserRole.storeManager;
 
           return RefreshIndicator(
             onRefresh: () async => _reload(),
@@ -116,6 +126,36 @@ class _MyDayScreenState extends ConsumerState<MyDayScreen> {
                         ),
                       ),
                     ),
+                  ),
+                const SizedBox(height: 24),
+                Text(
+                  "Today's sales",
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  canVoid
+                      ? 'Tap a sale to see it, or void one entered by mistake.'
+                      : 'Tap a sale to see what was sold.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                if (sales.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text('No sales yet today.'),
+                  ),
+                for (final sale in sales)
+                  SaleListTile(
+                    sale: sale,
+                    onTap: () async {
+                      final voided = await showSaleDetail(
+                        context,
+                        sale,
+                        canVoid: canVoid,
+                      );
+                      if (voided) _reload();
+                    },
                   ),
               ],
             ),

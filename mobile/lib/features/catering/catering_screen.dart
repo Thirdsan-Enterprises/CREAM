@@ -6,6 +6,7 @@ import '../../core/api/repositories/catering_repository.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/formatters/date_formatter.dart';
+import '../../shared/widgets/reason_dialog.dart';
 
 const _statuses = ['quoted', 'confirmed', 'delivered', 'settled', 'cancelled'];
 
@@ -272,6 +273,134 @@ class _OrderDetailSheetState extends ConsumerState<_OrderDetailSheet> {
     }
   }
 
+  /// Change what was agreed (plates, price, date, client). Needs a reason,
+  /// which goes in the change log.
+  Future<void> _edit() async {
+    final order = _order;
+    final plates = TextEditingController(text: '${order.numberOfPlates}');
+    final price = TextEditingController(
+      text: order.pricePerPlate?.toStringAsFixed(0) ?? '',
+    );
+    final name = TextEditingController(text: order.clientName);
+    final phone = TextEditingController(text: order.clientPhone);
+    final reason = TextEditingController();
+    var date = order.eventDate;
+    String? error;
+
+    final changes = await showDialog<Map<String, Object>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit order'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  decoration: const InputDecoration(labelText: 'Client'),
+                ),
+                TextField(
+                  controller: phone,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: 'Phone'),
+                ),
+                TextField(
+                  controller: plates,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Plates'),
+                ),
+                TextField(
+                  controller: price,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Price per plate',
+                    prefixText: 'UGX ',
+                  ),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Event date'),
+                  subtitle: Text(DateFormatter.date(date)),
+                  trailing: const Icon(Icons.edit_calendar_outlined),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: date,
+                      firstDate: DateTime(2024),
+                      lastDate: DateTime.now().add(const Duration(days: 730)),
+                    );
+                    if (picked != null) setDialogState(() => date = picked);
+                  },
+                ),
+                TextField(
+                  controller: reason,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    labelText: 'Reason for the change',
+                    helperText: 'Kept in the change log with your name.',
+                    errorText: error,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (reason.text.trim().isEmpty) {
+                  setDialogState(() => error = 'A reason is needed.');
+                  return;
+                }
+                final n = int.tryParse(plates.text);
+                final p = double.tryParse(price.text);
+                Navigator.pop(context, {
+                  if (name.text.trim() != order.clientName)
+                    'client_name': name.text.trim(),
+                  if (phone.text.trim() != order.clientPhone)
+                    'client_phone': phone.text.trim(),
+                  if (n != null && n > 0 && n != order.numberOfPlates)
+                    'number_of_plates': n,
+                  if (p != null && p > 0 && p != order.pricePerPlate)
+                    'price_per_plate': p,
+                  if (date != order.eventDate)
+                    'event_date': date.toIso8601String().split('T').first,
+                  'reason': reason.text.trim(),
+                });
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (changes == null || changes.length <= 1) return;
+
+    setState(() => _busy = true);
+    try {
+      final updated = await ref
+          .read(cateringRepositoryProvider)
+          .updateOrder(_order.id, changes);
+      if (!mounted) return;
+      setState(() => _order = updated);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Order updated.')));
+    } catch (e) {
+      if (!mounted) return;
+      final message = e is ApiException ? e.message : 'Something went wrong.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _addPayment() async {
     final amount = double.tryParse(_amountController.text);
     if (amount == null || amount <= 0) return;
@@ -321,9 +450,21 @@ class _OrderDetailSheetState extends ConsumerState<_OrderDetailSheet> {
                 context,
               ).textTheme.labelLarge?.copyWith(letterSpacing: 1.2),
             ),
-            Text(
-              order.clientName,
-              style: Theme.of(context).textTheme.headlineSmall,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    order.clientName,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ),
+                if (order.status != 'settled' && order.status != 'cancelled')
+                  TextButton.icon(
+                    onPressed: _busy ? null : _edit,
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    label: const Text('Edit'),
+                  ),
+              ],
             ),
             Text('${order.clientPhone} — ${order.package.name}'),
             const SizedBox(height: 4),
@@ -649,11 +790,31 @@ class _PackagesTabState extends ConsumerState<_PackagesTab> {
       ),
     );
 
-    if (newPrice == null || newPrice <= 0) return;
-    await ref
-        .read(cateringRepositoryProvider)
-        .updatePackagePrice(package.id, newPrice);
-    _reload();
+    if (newPrice == null || newPrice <= 0 || !mounted) return;
+    if (newPrice == package.pricePerPlate) return;
+    final reason = await askReason(
+      context,
+      'Why is ${package.name} changing?',
+      message:
+          '${CurrencyFormatter.format(package.pricePerPlate)} → ${CurrencyFormatter.format(newPrice)} per plate. '
+          'Orders already quoted keep their price.',
+    );
+    if (reason == null) return;
+    try {
+      await ref
+          .read(cateringRepositoryProvider)
+          .updatePackagePrice(package.id, newPrice, reason: reason);
+      _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e is ApiException ? e.message : 'Something went wrong.',
+          ),
+        ),
+      );
+    }
   }
 
   @override

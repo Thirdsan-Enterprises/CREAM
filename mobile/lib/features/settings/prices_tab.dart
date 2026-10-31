@@ -7,6 +7,7 @@ import '../../core/api/repositories/items_repository.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/models/item.dart';
+import '../../shared/widgets/reason_dialog.dart';
 
 /// Settings → Prices & menu. The plate and everything sold besides it, with
 /// the price for all branches and any branch that charges its own (Town's
@@ -835,40 +836,6 @@ class _AddToMenuDialogState extends State<_AddToMenuDialog> {
       ],
     );
   }
-}
-
-/// Asks why a change is being made. Returns null if cancelled.
-Future<String?> askReason(BuildContext context, String title) async {
-  final controller = TextEditingController();
-  final result = await showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        textCapitalization: TextCapitalization.sentences,
-        decoration: const InputDecoration(
-          labelText: 'Reason',
-          helperText: 'Kept in the change log with your name.',
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final text = controller.text.trim();
-            if (text.isNotEmpty) Navigator.pop(context, text);
-          },
-          child: const Text('Save'),
-        ),
-      ],
-    ),
-  );
-  return result;
 }
 
 extension _FirstOrNull<T> on Iterable<T> {

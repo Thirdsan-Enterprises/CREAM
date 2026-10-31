@@ -58,6 +58,7 @@ class BranchPerformanceService
 
         $grandTotal = (float) $sales->sum('total');
         $lastSaleAt = DB::table('sales')
+            ->whereNull('voided_at')
             ->selectRaw('store_id, MAX(sold_at) as last_sale_at')
             ->groupBy('store_id')
             ->pluck('last_sale_at', 'store_id');
@@ -180,6 +181,7 @@ class BranchPerformanceService
     {
         return DB::table('sales')
             ->leftJoin('users', 'users.id', '=', 'sales.sold_by')
+            ->whereNull('sales.voided_at')
             ->whereBetween('sales.sold_at', $this->bounds($period))
             ->when($storeId, fn ($q) => $q->where('sales.store_id', $storeId))
             ->orderBy('sales.sold_at')
@@ -200,6 +202,7 @@ class BranchPerformanceService
         return DB::table('sale_items')
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->leftJoin('items', 'items.id', '=', 'sale_items.item_id')
+            ->whereNull('sales.voided_at')
             ->whereBetween('sales.sold_at', $this->bounds($period))
             ->when($storeId, fn ($q) => $q->where('sales.store_id', $storeId))
             ->get([
@@ -219,6 +222,7 @@ class BranchPerformanceService
     private function revenueByStore(array $period, ?int $storeId = null): Collection
     {
         return DB::table('sales')
+            ->whereNull('voided_at')
             ->whereBetween('sold_at', $this->bounds($period))
             ->when($storeId, fn ($q) => $q->where('store_id', $storeId))
             ->selectRaw('store_id, SUM(total) as revenue')
@@ -421,6 +425,7 @@ class BranchPerformanceService
             ->leftJoin('users', 'users.id', '=', 'sales.sold_by')
             ->leftJoin('customers', 'customers.id', '=', 'sales.customer_id')
             ->where('sales.store_id', $storeId)
+            ->whereNull('sales.voided_at')
             ->whereBetween('sales.sold_at', $this->bounds($period))
             ->orderByDesc('sales.sold_at')
             ->orderByDesc('sales.id')
