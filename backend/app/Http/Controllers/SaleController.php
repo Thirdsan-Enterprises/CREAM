@@ -11,6 +11,7 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\StockMovement;
 use App\Models\Store;
+use App\Services\CustomerStanding;
 use App\Services\LedgerService;
 use App\Services\PricingService;
 use App\Services\StockService;
@@ -88,6 +89,17 @@ class SaleController extends Controller
         $customer = null;
         if ($data['payment_method'] === Sale::PAYMENT_ACCOUNT) {
             $customer = Customer::findOrFail($data['customer_id']);
+            if ($customer->store_id !== null && $customer->store_id !== $storeId) {
+                $home = $customer->store?->name ?? 'another branch';
+                throw ValidationException::withMessages([
+                    'customer_id' => ["{$customer->name} is a customer of {$home}. Charge their account at {$home}, or ask the owner to move it."],
+                ]);
+            }
+            if (! $customer->is_active) {
+                throw ValidationException::withMessages([
+                    'customer_id' => ["{$customer->name}'s account is closed."],
+                ]);
+            }
         }
 
         $sale = DB::transaction(function () use ($data, $storeId, $user, $customer) {
@@ -165,7 +177,13 @@ class SaleController extends Controller
             return $sale;
         });
 
-        return response()->json($sale->load('items.item'), 201);
+        $body = $sale->load('items.item')->toArray();
+        if ($customer) {
+            // Tell the cashier straight away if this account is getting low.
+            $body['customer_account'] = app(CustomerStanding::class)->for($customer->fresh());
+        }
+
+        return response()->json($body, 201);
     }
 
     /**
