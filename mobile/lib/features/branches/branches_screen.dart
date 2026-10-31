@@ -319,7 +319,7 @@ class _BranchCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Text(
-                        'MAIN',
+                        'PROCUREMENT',
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,

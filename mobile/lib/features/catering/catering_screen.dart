@@ -796,7 +796,7 @@ class _PackagesTabState extends ConsumerState<_PackagesTab> {
       context,
       'Why is ${package.name} changing?',
       message:
-          '${CurrencyFormatter.format(package.pricePerPlate)} → ${CurrencyFormatter.format(newPrice)} per plate. '
+          '${CurrencyFormatter.format(package.pricePerPlate)} to ${CurrencyFormatter.format(newPrice)} per plate. '
           'Orders already quoted keep their price.',
     );
     if (reason == null) return;

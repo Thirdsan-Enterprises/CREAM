@@ -50,7 +50,7 @@ class TransferTile extends ConsumerWidget {
     final lines = transfer.items.length;
     return Card(
       child: ListTile(
-        title: Text('${transfer.fromStoreName} → ${transfer.toStoreName}'),
+        title: Text('${transfer.fromStoreName} to ${transfer.toStoreName}'),
         subtitle: Text(
           [
             '#${transfer.id} · ${DateFormatter.dateTime(transfer.dispatchedAt)}',

@@ -290,7 +290,13 @@ class ChangeCard extends StatelessWidget {
                               decoration: TextDecoration.lineThrough,
                             ),
                           ),
-                          const TextSpan(text: '  →  '),
+                          const WidgetSpan(
+                            alignment: PlaceholderAlignment.middle,
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 6),
+                              child: Icon(Icons.arrow_forward, size: 14),
+                            ),
+                          ),
                           TextSpan(
                             text: _value(change.field, change.to),
                             style: const TextStyle(fontWeight: FontWeight.w700),
