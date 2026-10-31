@@ -7,28 +7,39 @@ import '../../core/auth/auth_session.dart';
 import '../../core/auth/user.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/stock_transfer.dart';
+import 'stock_requests.dart';
 
-class StockScreen extends StatelessWidget {
+class StockScreen extends ConsumerWidget {
   const StockScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authSessionProvider).user;
+    // The procurement unit buys for itself; branches ask it for stock.
+    final isProcurement =
+        user?.role == UserRole.storekeeper || (user?.store?.isMain ?? false);
+
     return DefaultTabController(
-      length: 2,
+      length: isProcurement ? 2 : 3,
       child: Column(
         children: [
           Material(
             color: Theme.of(context).scaffoldBackgroundColor,
-            child: const TabBar(
+            child: TabBar(
               tabs: [
-                Tab(text: 'Balances'),
-                Tab(text: 'Incoming Transfers'),
+                const Tab(text: 'Balances'),
+                const Tab(text: 'Incoming'),
+                if (!isProcurement) const Tab(text: 'Requests'),
               ],
             ),
           ),
-          const Expanded(
+          Expanded(
             child: TabBarView(
-              children: [_BalancesTab(), _IncomingTransfersTab()],
+              children: [
+                const _BalancesTab(),
+                const _IncomingTransfersTab(),
+                if (!isProcurement) const BranchRequestsTab(),
+              ],
             ),
           ),
         ],

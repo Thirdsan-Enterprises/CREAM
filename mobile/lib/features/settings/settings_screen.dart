@@ -17,7 +17,7 @@ const _roleLabels = {
   'admin': 'Owner (admin)',
   'store_manager': 'Store manager',
   'cashier': 'Cashier',
-  'storekeeper': 'Storekeeper',
+  'storekeeper': 'Procurement',
 };
 
 String _roleLabel(String role) => _roleLabels[role] ?? role;
@@ -128,6 +128,72 @@ class _StoresTabState extends ConsumerState<_StoresTab> {
     }
   }
 
+  /// Branch settings: which store is the procurement unit, whether it
+  /// sells, and closing a branch.
+  Future<void> _editStore(Store store) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(
+                store.name,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            if (!store.isMain)
+              ListTile(
+                leading: const Icon(Icons.local_shipping_outlined),
+                title: const Text('Make this the procurement unit'),
+                subtitle: const Text(
+                  'It buys food for everyone and sends it to the branches. '
+                  'Procurement logins move here.',
+                ),
+                onTap: () => Navigator.pop(context, 'main'),
+              ),
+            SwitchListTile(
+              secondary: const Icon(Icons.point_of_sale),
+              title: const Text('Sells meals'),
+              subtitle: const Text(
+                'Off for a procurement unit that only buys and sends.',
+              ),
+              value: store.sells,
+              onChanged: (_) => Navigator.pop(context, 'sells'),
+            ),
+            if (!store.isMain)
+              SwitchListTile(
+                secondary: const Icon(Icons.storefront_outlined),
+                title: const Text('Open'),
+                value: store.isActive,
+                onChanged: (_) => Navigator.pop(context, 'active'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (action == null) return;
+    final repo = ref.read(storesRepositoryProvider);
+    try {
+      switch (action) {
+        case 'main':
+          await repo.update(store.id, isMain: true);
+        case 'sells':
+          await repo.update(store.id, sells: !store.sells);
+        case 'active':
+          await repo.update(store.id, isActive: !store.isActive);
+      }
+      _reload();
+    } catch (e) {
+      if (!mounted) return;
+      final message = e is ApiException ? e.message : 'Something went wrong.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -147,10 +213,18 @@ class _StoresTabState extends ConsumerState<_StoresTab> {
               return Card(
                 child: ListTile(
                   title: Text(store.name),
-                  subtitle: Text(store.code),
+                  subtitle: Text(
+                    [
+                      store.code,
+                      if (store.isMain) 'Buys for everyone, sends to branches',
+                      if (!store.sells) 'Does not sell',
+                      if (!store.isActive) 'Closed',
+                    ].join(' · '),
+                  ),
                   trailing: store.isMain
-                      ? const Chip(label: Text('Main'))
-                      : null,
+                      ? const Chip(label: Text('Procurement'))
+                      : const Icon(Icons.chevron_right),
+                  onTap: () => _editStore(store),
                 ),
               );
             },
@@ -290,7 +364,7 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
 
   Future<void> _submit() async {
     if (_nameController.text.isEmpty || _phoneController.text.isEmpty) return;
-    if (_role != 'admin' && _store == null) return;
+    if (_role != 'admin' && _role != 'storekeeper' && _store == null) return;
     if (_passwordController.text.isNotEmpty &&
         _passwordController.text.length < 8) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -311,7 +385,11 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
             phone: _phoneController.text,
             password: _passwordController.text,
             role: _role,
-            storeId: _role == 'admin' ? null : _store?.id,
+            // Procurement always works at the procurement unit; the
+            // server places them there.
+            storeId: _role == 'admin' || _role == 'storekeeper'
+                ? null
+                : _store?.id,
           );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -376,7 +454,15 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
                 ],
                 onChanged: (value) => setState(() => _role = value!),
               ),
-              if (_role != 'admin') ...[
+              if (_role == 'storekeeper')
+                const Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: Text(
+                    'Works at the procurement unit: buys stock, sends it to '
+                    'branches and answers their requests. Cannot sell.',
+                  ),
+                ),
+              if (_role != 'admin' && _role != 'storekeeper') ...[
                 const SizedBox(height: 12),
                 DropdownButtonFormField<Store>(
                   initialValue: stores
@@ -437,7 +523,7 @@ class _NewUserSheetState extends ConsumerState<_NewUserSheet> {
         _passwordController.text.isEmpty) {
       return;
     }
-    if (_role != 'admin' && _store == null) return;
+    if (_role != 'admin' && _role != 'storekeeper' && _store == null) return;
 
     setState(() => _submitting = true);
     try {
@@ -448,7 +534,11 @@ class _NewUserSheetState extends ConsumerState<_NewUserSheet> {
             phone: _phoneController.text,
             password: _passwordController.text,
             role: _role,
-            storeId: _role == 'admin' ? null : _store?.id,
+            // Procurement always works at the procurement unit; the
+            // server places them there.
+            storeId: _role == 'admin' || _role == 'storekeeper'
+                ? null
+                : _store?.id,
           );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -511,7 +601,15 @@ class _NewUserSheetState extends ConsumerState<_NewUserSheet> {
                 ],
                 onChanged: (value) => setState(() => _role = value!),
               ),
-              if (_role != 'admin') ...[
+              if (_role == 'storekeeper')
+                const Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: Text(
+                    'Works at the procurement unit: buys stock, sends it to '
+                    'branches and answers their requests. Cannot sell.',
+                  ),
+                ),
+              if (_role != 'admin' && _role != 'storekeeper') ...[
                 const SizedBox(height: 12),
                 DropdownButtonFormField<Store>(
                   initialValue: _store,

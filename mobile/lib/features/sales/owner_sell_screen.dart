@@ -27,7 +27,7 @@ class _OwnerSellScreenState extends ConsumerState<OwnerSellScreen> {
     _stores = ref
         .read(storesRepositoryProvider)
         .all()
-        .then((all) => all.where((s) => s.isActive).toList());
+        .then((all) => all.where((s) => s.isActive && s.sells).toList());
   }
 
   @override

@@ -16,17 +16,34 @@ class StoresRepository {
         .toList();
   }
 
-  Future<Store> create({required String name, required String code}) async {
-    final body = await _api.post('/stores', data: {'name': name, 'code': code});
+  Future<Store> create({
+    required String name,
+    required String code,
+    bool sells = true,
+  }) async {
+    final body = await _api.post(
+      '/stores',
+      data: {'name': name, 'code': code, 'sells': sells},
+    );
     return Store.fromJson(body);
   }
 
-  Future<Store> update(int storeId, {String? name, bool? isActive}) async {
+  /// [isMain] true makes this store the procurement unit (the previous one
+  /// hands over, with its procurement staff).
+  Future<Store> update(
+    int storeId, {
+    String? name,
+    bool? isActive,
+    bool? isMain,
+    bool? sells,
+  }) async {
     final body = await _api.patch(
       '/stores/$storeId',
       data: {
-        if (name != null) 'name': name,
-        if (isActive != null) 'is_active': isActive,
+        'name': ?name,
+        'is_active': ?isActive,
+        'is_main': ?isMain,
+        'sells': ?sells,
       },
     );
     return Store.fromJson(body);

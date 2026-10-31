@@ -5,6 +5,7 @@ class Store {
     required this.code,
     required this.isMain,
     required this.isActive,
+    this.sells = true,
   });
 
   factory Store.fromJson(Map<String, dynamic> json) => Store(
@@ -13,6 +14,7 @@ class Store {
     code: json['code'] as String,
     isMain: json['is_main'] as bool? ?? false,
     isActive: json['is_active'] as bool? ?? true,
+    sells: json['sells'] as bool? ?? true,
   );
 
   final int id;
@@ -20,4 +22,7 @@ class Store {
   final String code;
   final bool isMain;
   final bool isActive;
+
+  /// False for a procurement unit of its own that only buys and sends.
+  final bool sells;
 }

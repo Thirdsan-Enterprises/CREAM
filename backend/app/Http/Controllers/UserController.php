@@ -26,7 +26,8 @@ class UserController extends Controller
             'role' => ['required', Rule::in([
                 User::ROLE_ADMIN, User::ROLE_STORE_MANAGER, User::ROLE_CASHIER, User::ROLE_STOREKEEPER,
             ])],
-            'store_id' => ['nullable', 'exists:stores,id', 'required_unless:role,'.User::ROLE_ADMIN],
+            // Procurement staff are placed at the procurement unit.
+            'store_id' => ['nullable', 'exists:stores,id', 'required_unless:role,'.User::ROLE_ADMIN.','.User::ROLE_STOREKEEPER],
             'is_active' => ['boolean'],
         ]);
 

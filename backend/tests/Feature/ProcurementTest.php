@@ -169,4 +169,11 @@ class ProcurementTest extends TestCase
             ->assertUnprocessable();
         $this->assertTrue($kiraManager->isProcurement());
     }
+
+    public function test_a_procurement_login_needs_no_branch_on_the_form(): void
+    {
+        $this->actingAs($this->owner)->postJson('/api/users', [
+            'name' => 'Buyer Two', 'phone' => '0700000098', 'password' => 'password123', 'role' => User::ROLE_STOREKEEPER,
+        ])->assertCreated()->assertJsonPath('store.name', 'Kira');
+    }
 }
