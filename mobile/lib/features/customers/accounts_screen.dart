@@ -101,7 +101,8 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            if (_searching) const Expanded(child: Center(child: CircularProgressIndicator())),
+            if (_searching)
+              const Expanded(child: Center(child: CircularProgressIndicator())),
             if (!_searching)
               Expanded(
                 child: _results.isEmpty
@@ -151,9 +152,7 @@ class _CustomerTile extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              balance == null
-                  ? '—'
-                  : CurrencyFormatter.format(balance),
+              balance == null ? '—' : CurrencyFormatter.format(balance),
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: owesMoney ? AppColors.danger : null,
@@ -356,4 +355,3 @@ class _CustomerDetailSheetState extends ConsumerState<_CustomerDetailSheet> {
     );
   }
 }
-

@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\DrinkPrice;
+use App\Models\EditLog;
 use App\Models\Item;
 use App\Models\ItemStoreSetting;
+use App\Models\Store;
 use App\Services\PricingService;
 use App\Services\StockService;
 use App\Support\StoreScope;
@@ -99,7 +101,11 @@ class MenuController extends Controller
         return response()->json($this->row($item, $data['store_id'] ?? null), 201);
     }
 
-    /** Change a menu item's details, or its price for all branches or one. */
+    /**
+     * Change a menu item's details, or its price for all branches or one.
+     * "use_default" with a store_id removes that branch's own price. A reason
+     * is required, and the change is logged.
+     */
     public function update(Request $request, Item $item)
     {
         $data = $request->validate([
@@ -110,9 +116,28 @@ class MenuController extends Controller
             'is_active' => ['sometimes', 'boolean'],
             'price' => ['sometimes', 'numeric', 'gt:0'],
             'store_id' => ['nullable', 'exists:stores,id'],
+            'use_default' => ['sometimes', 'boolean'],
+            'reason' => ['required', 'string', 'max:500'],
+        ], [
+            'reason.required' => 'Say why this is changing.',
         ]);
 
-        DB::transaction(function () use ($item, $data) {
+        $storeId = $data['store_id'] ?? null;
+        $useDefault = (bool) ($data['use_default'] ?? false);
+        if ($useDefault && $storeId === null) {
+            throw ValidationException::withMessages(['store_id' => ['Choose the branch to put back on the price for all branches.']]);
+        }
+
+        DB::transaction(function () use ($item, $data, $storeId, $useDefault, $request) {
+            $before = [
+                'name' => $item->name,
+                'unit' => $item->unit,
+                'category' => $item->sell_category,
+                'tracks_stock' => (bool) $item->tracks_stock,
+                'is_active' => (bool) $item->is_active,
+                'price' => $this->pricingService->currentItemPrice($item->id, $storeId),
+            ];
+
             $fields = array_intersect_key($data, array_flip(['name', 'unit', 'tracks_stock', 'is_active']));
             if (isset($data['category'])) {
                 $fields['sell_category'] = trim($data['category']);
@@ -120,12 +145,35 @@ class MenuController extends Controller
             }
             $item->update($fields);
 
-            if (isset($data['price'])) {
-                $this->setPrice($item, (float) $data['price'], $data['store_id'] ?? null);
+            if ($useDefault) {
+                DrinkPrice::where('item_id', $item->id)->where('store_id', $storeId)->where('is_active', true)
+                    ->update(['is_active' => false]);
+            } elseif (isset($data['price'])) {
+                $this->setPrice($item, (float) $data['price'], $storeId);
+            }
+
+            $item->refresh();
+            $after = [
+                'name' => $item->name,
+                'unit' => $item->unit,
+                'category' => $item->sell_category,
+                'tracks_stock' => (bool) $item->tracks_stock,
+                'is_active' => (bool) $item->is_active,
+                'price' => $this->pricingService->currentItemPrice($item->id, $storeId),
+            ];
+
+            $changes = EditLog::diff($before, $after);
+            if ($changes) {
+                $where = $storeId ? ' at '.Store::find($storeId)->name : '';
+                EditLog::record(
+                    $request->user(), 'menu_item', $item->id, $item->name.$where,
+                    isset($changes['price']) && count($changes) === 1 ? ($useDefault ? 'price_reset' : 'price_changed') : 'edited',
+                    $changes, $data['reason'], $storeId,
+                );
             }
         });
 
-        return response()->json($this->row($item->fresh(), $data['store_id'] ?? null));
+        return response()->json($this->row($item->fresh(), $storeId));
     }
 
     private function setPrice(Item $item, float $price, ?int $storeId): void

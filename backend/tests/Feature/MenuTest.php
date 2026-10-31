@@ -68,7 +68,7 @@ class MenuTest extends TestCase
     {
         $tea = $this->addToMenu(['name' => 'Tea', 'unit' => 'cup', 'category' => 'Breakfast', 'price' => 1000, 'tracks_stock' => false]);
         $egg = $this->addToMenu(['name' => 'Egg', 'unit' => 'piece', 'category' => 'Breakfast', 'price' => 1500]);
-        $this->actingAs($this->owner)->patchJson("/api/menu-items/{$egg}", ['price' => 1200, 'store_id' => $this->town->id])->assertOk();
+        $this->actingAs($this->owner)->patchJson("/api/menu-items/{$egg}", ['price' => 1200, 'store_id' => $this->town->id, 'reason' => 'Town prices'])->assertOk();
 
         $menu = collect($this->actingAs($this->cashier)->getJson('/api/menu')->json())->keyBy('item.name');
 

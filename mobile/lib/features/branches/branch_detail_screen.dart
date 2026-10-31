@@ -169,6 +169,14 @@ class _BranchDetailScreenState extends ConsumerState<BranchDetailScreen> {
                 ),
               ],
             ),
+            if (totals.itemsSold > 0) ...[
+              const SizedBox(height: 12),
+              StatTile(
+                label: 'Breakfast & other items',
+                value:
+                    '${qty(totals.itemsSold)} · ${compactUgx(totals.itemRevenue)}',
+              ),
+            ],
           ],
         ),
       ),
@@ -232,15 +240,18 @@ class _BranchDetailScreenState extends ConsumerState<BranchDetailScreen> {
       ),
       gap,
       SectionCard(
-        title: 'Drinks sold',
+        title: 'Drinks & menu items',
         child: data.drinks.isEmpty
-            ? Text('No drinks sold yet.', style: TextStyle(color: muted))
+            ? Text('Nothing sold yet.', style: TextStyle(color: muted))
             : Column(
                 children: [
                   for (final drink in data.drinks)
                     _LineRow(
                       leading: qty(drink.count),
-                      title: drink.name,
+                      title:
+                          drink.category == null || drink.category == 'Drinks'
+                          ? drink.name
+                          : '${drink.name} · ${drink.category}',
                       trailing: CurrencyFormatter.format(drink.revenue),
                     ),
                 ],

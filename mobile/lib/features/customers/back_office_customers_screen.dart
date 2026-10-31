@@ -116,32 +116,33 @@ class _BackOfficeCustomersScreenState
                 child: _results.isEmpty
                     ? const Center(child: Text('No customers found.'))
                     : ListView.builder(
-                  itemCount: _results.length,
-                  itemBuilder: (context, index) {
-                    final customer = _results[index];
-                    final balance = customer.balance;
-                    final owesMoney = customer.isCredit && (balance ?? 0) < 0;
-                    return Card(
-                      child: ListTile(
-                        title: Text(customer.name),
-                        subtitle: Text(
-                          '${customer.phone} — ${customer.accountTypeLabel}'
-                          '${customer.isCredit ? ' (limit ${CurrencyFormatter.format(customer.creditLimit)})' : ''}',
-                        ),
-                        trailing: Text(
-                          balance == null
-                              ? '—'
-                              : CurrencyFormatter.format(balance),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: owesMoney ? AppColors.danger : null,
-                          ),
-                        ),
-                        onTap: () => _openCustomer(customer),
+                        itemCount: _results.length,
+                        itemBuilder: (context, index) {
+                          final customer = _results[index];
+                          final balance = customer.balance;
+                          final owesMoney =
+                              customer.isCredit && (balance ?? 0) < 0;
+                          return Card(
+                            child: ListTile(
+                              title: Text(customer.name),
+                              subtitle: Text(
+                                '${customer.phone} — ${customer.accountTypeLabel}'
+                                '${customer.isCredit ? ' (limit ${CurrencyFormatter.format(customer.creditLimit)})' : ''}',
+                              ),
+                              trailing: Text(
+                                balance == null
+                                    ? '—'
+                                    : CurrencyFormatter.format(balance),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: owesMoney ? AppColors.danger : null,
+                                ),
+                              ),
+                              onTap: () => _openCustomer(customer),
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
               ),
           ],
         ),

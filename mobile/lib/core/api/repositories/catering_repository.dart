@@ -82,7 +82,9 @@ class CateringOrder {
       clientPhone: json['client_phone'] as String,
       eventName: json['event_name'] as String?,
       eventDate: DateTime.parse(json['event_date'] as String),
-      package: CateringPackage.fromJson(json['package'] as Map<String, dynamic>),
+      package: CateringPackage.fromJson(
+        json['package'] as Map<String, dynamic>,
+      ),
       pricePerPlate: json['price_per_plate'] != null
           ? double.parse(json['price_per_plate'].toString())
           : null,

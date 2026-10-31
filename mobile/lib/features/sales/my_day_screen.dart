@@ -93,6 +93,13 @@ class _MyDayScreenState extends ConsumerState<MyDayScreen> {
                     ),
                   ],
                 ),
+                if (summary.itemRevenue > 0) ...[
+                  const SizedBox(height: 12),
+                  _StatCard(
+                    label: 'Breakfast & other items',
+                    value: CurrencyFormatter.format(summary.itemRevenue),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Text(
                   'By payment method',

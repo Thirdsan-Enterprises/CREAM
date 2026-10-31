@@ -64,7 +64,10 @@ class CustomersRepository {
   Future<double> deposit(int customerId, double amount, {String? note}) async {
     final body = await _api.post(
       '/customers/$customerId/deposit',
-      data: {'amount': amount, if (note != null && note.isNotEmpty) 'note': note},
+      data: {
+        'amount': amount,
+        if (note != null && note.isNotEmpty) 'note': note,
+      },
     );
     return (body['balance'] as num).toDouble();
   }

@@ -27,12 +27,7 @@ class _FinancialsCard extends StatelessWidget {
           children: [
             _row(context, 'Total', order.totalAmount),
             _row(context, 'Deposited', order.depositedTotal),
-            _row(
-              context,
-              'Balance due',
-              order.balanceDue,
-              emphasize: true,
-            ),
+            _row(context, 'Balance due', order.balanceDue, emphasize: true),
             if (order.status == 'cancelled') ...[
               const Divider(height: 20),
               Text(
@@ -66,10 +61,14 @@ class _FinancialsCard extends StatelessWidget {
     bool emphasize = false,
     Color? color,
   }) {
-    final style = (emphasize
-            ? Theme.of(context).textTheme.titleMedium
-            : Theme.of(context).textTheme.bodyMedium)
-        ?.copyWith(color: color, fontWeight: emphasize ? FontWeight.bold : null);
+    final style =
+        (emphasize
+                ? Theme.of(context).textTheme.titleMedium
+                : Theme.of(context).textTheme.bodyMedium)
+            ?.copyWith(
+              color: color,
+              fontWeight: emphasize ? FontWeight.bold : null,
+            );
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -281,11 +280,7 @@ class _OrderDetailSheetState extends ConsumerState<_OrderDetailSheet> {
     try {
       await ref
           .read(cateringRepositoryProvider)
-          .addPayment(
-            _order.id,
-            amount: amount,
-            paymentMethod: _paymentMethod,
-          );
+          .addPayment(_order.id, amount: amount, paymentMethod: _paymentMethod);
       if (!mounted) return;
       _amountController.clear();
       ScaffoldMessenger.of(
@@ -347,10 +342,7 @@ class _OrderDetailSheetState extends ConsumerState<_OrderDetailSheet> {
             ),
             if (order.notes != null && order.notes!.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text(
-                order.notes!,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              Text(order.notes!, style: Theme.of(context).textTheme.bodySmall),
             ],
             const SizedBox(height: 12),
             _FinancialsCard(order: order),
@@ -557,7 +549,9 @@ class _NewOrderTabState extends ConsumerState<_NewOrderTab> {
                   // Prefill from the package as a starting point — the field
                   // stays editable so a negotiated price can override it.
                   if (value != null && _priceController.text.isEmpty) {
-                    _priceController.text = value.pricePerPlate.toStringAsFixed(0);
+                    _priceController.text = value.pricePerPlate.toStringAsFixed(
+                      0,
+                    );
                   }
                 }),
               ),
@@ -567,7 +561,8 @@ class _NewOrderTabState extends ConsumerState<_NewOrderTab> {
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Price per plate (override, optional)',
-                  helperText: 'Defaults to the package price above if left blank',
+                  helperText:
+                      'Defaults to the package price above if left blank',
                 ),
               ),
               const SizedBox(height: 12),
@@ -584,8 +579,7 @@ class _NewOrderTabState extends ConsumerState<_NewOrderTab> {
                 maxLines: 3,
                 decoration: const InputDecoration(
                   labelText: 'Additional details (optional)',
-                  hintText:
-                      'Dietary requirements, delivery instructions, etc.',
+                  hintText: 'Dietary requirements, delivery instructions, etc.',
                   alignLabelWithHint: true,
                 ),
               ),

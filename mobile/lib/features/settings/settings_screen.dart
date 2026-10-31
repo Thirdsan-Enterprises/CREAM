@@ -7,8 +7,8 @@ import '../../core/api/repositories/stores_repository.dart';
 import '../../core/api/repositories/users_repository.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/auth/store.dart';
-import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/models/item.dart';
+import 'prices_tab.dart';
 
 const _roles = ['admin', 'store_manager', 'cashier', 'storekeeper'];
 
@@ -34,22 +34,19 @@ class SettingsScreen extends StatelessWidget {
           Material(
             color: Theme.of(context).scaffoldBackgroundColor,
             child: const TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
               tabs: [
                 Tab(text: 'Branches'),
                 Tab(text: 'Users'),
                 Tab(text: 'Items'),
-                Tab(text: 'Plate price'),
+                Tab(text: 'Prices & menu'),
               ],
             ),
           ),
           const Expanded(
             child: TabBarView(
-              children: [
-                _StoresTab(),
-                _UsersTab(),
-                _ItemsTab(),
-                _PlatePriceTab(),
-              ],
+              children: [_StoresTab(), _UsersTab(), _ItemsTab(), PricesTab()],
             ),
           ),
         ],
@@ -714,94 +711,6 @@ class _ItemsTabState extends ConsumerState<_ItemsTab> {
         icon: const Icon(Icons.add),
         label: const Text('New item'),
       ),
-    );
-  }
-}
-
-class _PlatePriceTab extends ConsumerStatefulWidget {
-  const _PlatePriceTab();
-
-  @override
-  ConsumerState<_PlatePriceTab> createState() => _PlatePriceTabState();
-}
-
-class _PlatePriceTabState extends ConsumerState<_PlatePriceTab> {
-  late Future<double> _future;
-  final _controller = TextEditingController();
-  bool _submitting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = ref.read(itemsRepositoryProvider).platePrice();
-  }
-
-  Future<void> _submit() async {
-    final price = double.tryParse(_controller.text);
-    if (price == null || price <= 0) return;
-
-    setState(() => _submitting = true);
-    try {
-      await ref.read(itemsRepositoryProvider).updatePlatePrice(price: price);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Plate price updated.')));
-      setState(() => _future = ref.read(itemsRepositoryProvider).platePrice());
-    } catch (e) {
-      if (!mounted) return;
-      final message = e is ApiException ? e.message : 'Something went wrong.';
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<double>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Current plate price',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              Text(
-                CurrencyFormatter.format(snapshot.data!),
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: _controller,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'New price'),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: _submitting ? null : _submit,
-                child: _submitting
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Update price'),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }

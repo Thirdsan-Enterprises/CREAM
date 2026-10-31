@@ -14,8 +14,8 @@ class _FakeItems extends ItemsRepository {
   Future<double> platePrice({int? storeId}) async => 25000;
 
   @override
-  Future<List<Drink>> drinks({int? storeId}) async => [
-    Drink(
+  Future<List<MenuEntry>> menu({int? storeId}) async => [
+    MenuEntry(
       item: Item(
         id: 7,
         name: 'Soda',
@@ -39,6 +39,7 @@ double _contrast(Color a, Color b) {
 
 void main() {
   sellStockTests();
+  breakfastTests();
   testWidgets('a drink stays readable once it has been added to the sale', (
     tester,
   ) async {
@@ -77,7 +78,7 @@ void main() {
       );
     }
     expect(find.text('Total'), findsOneWidget);
-    expect(find.text('UGX 27,000'), findsOneWidget, reason: 'plate + 1 soda');
+    expect(find.text('UGX 2,000'), findsWidgets, reason: 'a soda alone');
   });
 }
 
@@ -90,8 +91,8 @@ class _FakeItemsWithStock extends ItemsRepository {
   Future<double> platePrice({int? storeId}) async => 25000;
 
   @override
-  Future<List<Drink>> drinks({int? storeId}) async => [
-    Drink(
+  Future<List<MenuEntry>> menu({int? storeId}) async => [
+    MenuEntry(
       item: Item(
         id: 7,
         name: 'Soda',
@@ -135,6 +136,7 @@ void sellStockTests() {
   ) async {
     await _pumpSell(tester, 1);
 
+    await tester.tap(find.byTooltip('One more plate'));
     await tester.tap(find.text('Soda'));
     await tester.pumpAndSettle();
     expect(find.text('UGX 27,000'), findsOneWidget, reason: 'plate + 1 soda');
@@ -157,7 +159,76 @@ void sellStockTests() {
       find.text('Soda is out of stock. Record the purchase first.'),
       findsOneWidget,
     );
-    expect(find.text('UGX 25,000'), findsWidgets);
-    expect(find.text('UGX 27,000'), findsNothing);
+    expect(find.text('Nothing added yet'), findsOneWidget);
+  });
+}
+
+class _FakeBreakfastMenu extends ItemsRepository {
+  _FakeBreakfastMenu() : super(ApiClient());
+
+  @override
+  Future<double> platePrice({int? storeId}) async => 15000;
+
+  @override
+  Future<List<MenuEntry>> menu({int? storeId}) async => [
+    MenuEntry(
+      item: Item(
+        id: 21,
+        name: 'Tea',
+        unit: 'cup',
+        category: null,
+        isDrink: false,
+        isActive: true,
+      ),
+      price: 1000,
+      category: 'Breakfast',
+      tracksStock: false,
+    ),
+    MenuEntry(
+      item: Item(
+        id: 22,
+        name: 'Egg',
+        unit: 'piece',
+        category: null,
+        isDrink: false,
+        isActive: true,
+      ),
+      price: 1500,
+      category: 'Breakfast',
+      balance: 30,
+    ),
+  ];
+}
+
+void breakfastTests() {
+  testWidgets('breakfast items sell on their own, without a plate', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          itemsRepositoryProvider.overrideWithValue(_FakeBreakfastMenu()),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.outletTerminal(),
+          home: const Scaffold(body: SellScreen()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Breakfast'), findsOneWidget);
+    expect(find.text('30 left'), findsOneWidget, reason: 'eggs are counted');
+
+    await tester.tap(find.text('Tea'));
+    await tester.tap(find.text('Tea'));
+    await tester.tap(find.text('Egg'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 Tea · 1 Egg'), findsOneWidget);
+    expect(find.text('UGX 3,500'), findsOneWidget);
   });
 }

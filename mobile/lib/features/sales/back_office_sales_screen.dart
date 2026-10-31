@@ -111,6 +111,13 @@ class _BackOfficeSalesScreenState extends ConsumerState<BackOfficeSalesScreen> {
                   ),
                 ],
               ),
+              if (summary.itemRevenue > 0) ...[
+                const SizedBox(height: 12),
+                _StatCard(
+                  label: 'Breakfast & other items',
+                  value: CurrencyFormatter.format(summary.itemRevenue),
+                ),
+              ],
               const SizedBox(height: 24),
               Text(
                 'Sales (${sales.length})',
