@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api/repositories/branch_reports_repository.dart';
+import '../../shared/pdf/cream_documents.dart';
+import '../../shared/pdf/share_pdf.dart';
+import '../../core/auth/auth_session.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/formatters/currency_formatter.dart';
@@ -38,7 +41,30 @@ class _BranchDetailScreenState extends ConsumerState<BranchDetailScreen> {
     return Theme(
       data: AppTheme.backOffice(),
       child: Scaffold(
-        appBar: AppBar(title: Text(widget.storeName)),
+        appBar: AppBar(
+          title: Text(widget.storeName),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              tooltip: 'Download report',
+              onPressed: detail.valueOrNull == null
+                  ? null
+                  : () => offerPdf(
+                      context,
+                      title: '${widget.storeName} report, ${_range.label}',
+                      filename:
+                          'cream-${widget.storeName.toLowerCase().replaceAll(' ', '-')}-${_range.name}.pdf',
+                      build: () => branchReportPdf(
+                        detail.value!,
+                        range: _range,
+                        printedBy:
+                            ref.read(authSessionProvider).user?.name ??
+                            'Cream POS',
+                      ),
+                    ),
+            ),
+          ],
+        ),
         body: RefreshIndicator(
           color: AppColors.gold,
           onRefresh: () => ref.refresh(branchDetailProvider(args).future),

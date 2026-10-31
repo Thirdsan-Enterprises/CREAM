@@ -56,6 +56,17 @@ class StockRepository {
         .toList();
   }
 
+  /// Transfers in and out ([storeId] for the owner), newest first.
+  Future<List<StockTransfer>> transfers({int? storeId, String? status}) async {
+    final body = await _api.get(
+      '/transfers',
+      query: {'store_id': ?storeId, 'status': ?status},
+    );
+    return (body['data'] as List<dynamic>)
+        .map((e) => StockTransfer.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<StockTransfer> confirmTransfer({
     required int transferId,
     required List<Map<String, dynamic>> items,

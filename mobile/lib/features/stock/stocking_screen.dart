@@ -10,6 +10,7 @@ import '../../core/auth/store.dart';
 import '../../shared/formatters/date_formatter.dart';
 import '../../shared/models/item.dart';
 import 'stock_requests.dart';
+import 'transfers_list.dart';
 
 /// Sentinel shown as the first dropdown entry so an item that isn't in the
 /// list yet can be created without leaving the Stocking screen (Settings >
@@ -195,7 +196,7 @@ class StockingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Column(
         children: [
           Material(
@@ -207,6 +208,7 @@ class StockingScreen extends StatelessWidget {
                 Tab(text: 'Requests'),
                 Tab(text: 'Purchase'),
                 Tab(text: 'Send to branch'),
+                Tab(text: 'Transfers'),
                 Tab(text: 'Branch stock'),
                 Tab(text: 'History'),
               ],
@@ -218,6 +220,7 @@ class StockingScreen extends StatelessWidget {
                 ProcurementRequestsTab(),
                 _PurchaseTab(),
                 _TransferTab(),
+                TransfersListTab(),
                 BranchStockTab(),
                 _HistoryTab(),
               ],

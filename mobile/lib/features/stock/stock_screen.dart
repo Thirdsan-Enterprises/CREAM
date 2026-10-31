@@ -8,6 +8,7 @@ import '../../core/auth/user.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/models/stock_transfer.dart';
 import 'stock_requests.dart';
+import 'transfers_list.dart';
 
 class StockScreen extends ConsumerWidget {
   const StockScreen({super.key});
@@ -475,17 +476,16 @@ class _IncomingTransfersTabState extends ConsumerState<_IncomingTransfersTab> {
   @override
   void initState() {
     super.initState();
-    _future = ref.read(stockRepositoryProvider).incomingTransfers();
+    _future = ref.read(stockRepositoryProvider).transfers();
   }
 
   void _reload() {
-    setState(
-      () => _future = ref.read(stockRepositoryProvider).incomingTransfers(),
-    );
+    setState(() => _future = ref.read(stockRepositoryProvider).transfers());
   }
 
   @override
   Widget build(BuildContext context) {
+    final myStore = ref.watch(authSessionProvider).user?.storeId;
     return FutureBuilder<List<StockTransfer>>(
       future: _future,
       builder: (context, snapshot) {
@@ -496,18 +496,38 @@ class _IncomingTransfersTabState extends ConsumerState<_IncomingTransfersTab> {
           return Center(child: Text('${snapshot.error}'));
         }
 
-        final transfers = snapshot.data!;
-        if (transfers.isEmpty) {
-          return const Center(child: Text('No incoming transfers to confirm.'));
-        }
+        final all = snapshot.data!;
+        // Waiting to be counted here; everything else is history, each
+        // with a receipt.
+        final waiting = all
+            .where((t) => t.status == 'dispatched' && t.toStoreId == myStore)
+            .toList();
+        final history = all.where((t) => !waiting.contains(t)).toList();
 
         return RefreshIndicator(
           onRefresh: () async => _reload(),
-          child: ListView.builder(
+          child: ListView(
             padding: const EdgeInsets.all(12),
-            itemCount: transfers.length,
-            itemBuilder: (context, index) =>
-                _TransferCard(transfer: transfers[index], onConfirmed: _reload),
+            children: [
+              if (waiting.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: Text('Nothing waiting to be received.')),
+                ),
+              for (final transfer in waiting)
+                _TransferCard(transfer: transfer, onConfirmed: _reload),
+              if (history.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+                  child: Text(
+                    'Past transfers',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                for (final transfer in history.take(30))
+                  TransferTile(transfer: transfer),
+              ],
+            ],
           ),
         );
       },

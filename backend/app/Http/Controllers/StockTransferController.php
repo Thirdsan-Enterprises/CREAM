@@ -23,7 +23,7 @@ class StockTransferController extends Controller
     {
         $user = $request->user();
 
-        $query = StockTransfer::query()->with(['fromStore', 'toStore', 'items.item'])->orderByDesc('dispatched_at');
+        $query = StockTransfer::query()->with(['fromStore', 'toStore', 'items.item', 'dispatchedBy:id,name', 'confirmedBy:id,name'])->orderByDesc('dispatched_at')->orderByDesc('id');
 
         if (! $user->isAdmin()) {
             $query->where(function ($q) use ($user) {
