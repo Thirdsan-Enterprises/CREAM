@@ -13,6 +13,9 @@ class SaleItem extends Model
 
     public const TYPE_DRINK = 'drink';
 
+    /** Any other menu item sold on its own: an egg, a cup of tea. */
+    public const TYPE_ITEM = 'item';
+
     protected function casts(): array
     {
         return [

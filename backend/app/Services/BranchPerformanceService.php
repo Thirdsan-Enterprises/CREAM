@@ -119,6 +119,7 @@ class BranchPerformanceService
             'by_payment_method' => $this->byPaymentMethod($sales)->values(),
             'by_cashier' => $this->byCashier($sales, $items),
             'drinks' => $this->drinks($items),
+            'menu_items' => $this->menuItems($items),
             'stock_used' => $this->stockUsed($period, $store->id),
             'stock' => [
                 'reorder_count' => $stock->where('status', 'Re-Order')->count(),
@@ -203,7 +204,7 @@ class BranchPerformanceService
             ->when($storeId, fn ($q) => $q->where('sales.store_id', $storeId))
             ->get([
                 'sale_items.sale_id', 'sales.store_id', 'sales.sold_by', 'sales.sold_at',
-                'sale_items.item_type', 'sale_items.item_id', 'items.name as item_name',
+                'sale_items.item_type', 'sale_items.item_id', 'items.name as item_name', 'items.sell_category',
                 'sale_items.qty', 'sale_items.line_total',
             ])
             ->map(function ($row) {
@@ -231,6 +232,7 @@ class BranchPerformanceService
         $revenue = (float) $sales->sum('total');
         $plates = $items->where('item_type', SaleItem::TYPE_PLATE);
         $drinks = $items->where('item_type', SaleItem::TYPE_DRINK);
+        $others = $items->where('item_type', SaleItem::TYPE_ITEM);
         $count = $sales->count();
 
         return [
@@ -245,6 +247,9 @@ class BranchPerformanceService
             'plate_revenue' => (float) $plates->sum('line_total'),
             'drinks_sold' => (float) $drinks->sum('qty'),
             'drink_revenue' => (float) $drinks->sum('line_total'),
+            // Sold on their own, not drinks: eggs, tea...
+            'items_sold' => (float) $others->sum('qty'),
+            'item_revenue' => (float) $others->sum('line_total'),
         ];
     }
 
@@ -327,6 +332,23 @@ class BranchPerformanceService
                 'revenue' => (float) $g->sum('total'),
                 'sales_count' => $g->count(),
                 'plates_sold' => (float) ($platesBySeller[$userId] ?? collect())->sum('qty'),
+            ])
+            ->sortByDesc('revenue')
+            ->values();
+    }
+
+    /** Every drink and other item sold on its own, with its menu category. */
+    private function menuItems(Collection $items): Collection
+    {
+        return $items->where('item_type', '!=', SaleItem::TYPE_PLATE)
+            ->groupBy('item_id')
+            ->map(fn ($g, $itemId) => [
+                'item_id' => (int) $itemId,
+                'name' => $g->first()->item_name ?? 'Unknown',
+                'category' => $g->first()->sell_category
+                    ?? ($g->first()->item_type === SaleItem::TYPE_DRINK ? 'Drinks' : 'Other'),
+                'qty' => (float) $g->sum('qty'),
+                'revenue' => (float) $g->sum('line_total'),
             ])
             ->sortByDesc('revenue')
             ->values();

@@ -7,6 +7,7 @@ use App\Http\Controllers\CateringPackageController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DrinkController;
 use App\Http\Controllers\ItemController;
+use App\Http\Controllers\MenuController;
 use App\Http\Controllers\PlatePriceController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
@@ -34,6 +35,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/plate-price', [PlatePriceController::class, 'show']);
     Route::get('/drinks', [DrinkController::class, 'index']);
+    Route::get('/menu', [MenuController::class, 'index']);
 
     Route::get('/sales', [SaleController::class, 'index']);
     Route::get('/sales/summary', [SaleController::class, 'summary']);
@@ -64,6 +66,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/plate-price', [PlatePriceController::class, 'update']);
         Route::post('/drinks', [DrinkController::class, 'store']);
         Route::patch('/drinks/{item}', [DrinkController::class, 'update']);
+        Route::post('/menu-items', [MenuController::class, 'store']);
+        Route::patch('/menu-items/{item}', [MenuController::class, 'update']);
 
         Route::get('/catering-packages', [CateringPackageController::class, 'index']);
         Route::post('/catering-packages', [CateringPackageController::class, 'store']);
