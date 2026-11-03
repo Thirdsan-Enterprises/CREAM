@@ -38,6 +38,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STORE_MANAGER.','.User::ROLE_STOREKEEPER)->group(function () {
         Route::get('/items', [ItemController::class, 'index']);
         Route::get('/items/{item}/balances', [ItemController::class, 'balances']);
+        // Owner and procurement only (checked in the controller).
+        Route::post('/items', [ItemController::class, 'store']);
+        Route::patch('/items/{item}', [ItemController::class, 'update']);
+        Route::delete('/items/{item}', [ItemController::class, 'destroy']);
+        Route::post('/items/{item}/store-settings', [ItemController::class, 'setStoreSettings']);
 
         Route::get('/stock/movements', [StockMovementController::class, 'index']);
         Route::get('/stock/status', [StockMovementController::class, 'status']);
@@ -80,10 +85,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store']);
         Route::patch('/users/{user}', [UserController::class, 'update']);
-
-        Route::post('/items', [ItemController::class, 'store']);
-        Route::patch('/items/{item}', [ItemController::class, 'update']);
-        Route::post('/items/{item}/store-settings', [ItemController::class, 'setStoreSettings']);
 
         Route::patch('/plate-price', [PlatePriceController::class, 'update']);
         Route::post('/drinks', [DrinkController::class, 'store']);

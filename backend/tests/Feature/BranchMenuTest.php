@@ -126,6 +126,19 @@ class BranchMenuTest extends TestCase
         $this->assertTrue(collect($row['branches'])->every(fn ($b) => $b['on_menu']));
     }
 
+    public function test_breakfast_cassava_is_a_dish_not_the_kitchen_cassava(): void
+    {
+        $dish = Item::where('name', 'Cassava')->where('is_sellable', true)->sole();
+        $this->assertFalse((bool) $dish->tracks_stock);
+        $kitchen = Item::where('name', 'Cassava')->where('is_sellable', false)->sole();
+        $this->assertTrue((bool) $kitchen->tracks_stock);
+
+        $cashier = $this->cashierAt($this->town);
+        $this->actingAs($cashier)->postJson('/api/sales', ['payment_method' => 'cash', 'lines' => [
+            ['item_type' => 'item', 'item_id' => $dish->id, 'qty' => 2],
+        ]])->assertCreated()->assertJsonPath('total', '1000.00');
+    }
+
     public function test_loading_the_menu_twice_changes_nothing(): void
     {
         $count = Item::count();

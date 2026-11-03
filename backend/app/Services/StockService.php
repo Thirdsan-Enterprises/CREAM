@@ -44,7 +44,7 @@ class StockService
         // Only what is counted on a shelf: kitchen stock and drinks, not
         // dishes made to order (lunch, tea).
         $settings = ItemStoreSetting::query()->where('store_id', $storeId)
-            ->whereHas('item', fn ($q) => $q->where('tracks_stock', true))
+            ->whereHas('item', fn ($q) => $q->where('tracks_stock', true)->where('is_active', true))
             ->with('item')->get();
 
         $balances = StockMovement::query()

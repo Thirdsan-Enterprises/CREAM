@@ -74,12 +74,19 @@ class LoadMenu extends Command
 
         DB::transaction(function () use ($branches, $others) {
             foreach (self::MENU as [$heading, $name, $unit, $price, $counted]) {
-                $item = Item::firstOrCreate(['name' => $name], [
-                    'unit' => $unit,
-                    'is_active' => true,
-                    'is_drink' => $heading === 'Drinks',
-                    'tracks_stock' => $counted,
-                ]);
+                // Reuse a menu item (or drink) of the same name, never a
+                // kitchen stock item: "Cassava" on the breakfast menu is a
+                // dish, not the kilos of cassava procurement buys.
+                $item = Item::where('name', $name)
+                    ->where(fn ($q) => $q->where('is_sellable', true)->orWhere('is_drink', true))
+                    ->first()
+                    ?? Item::create([
+                        'name' => $name,
+                        'unit' => $unit,
+                        'is_active' => true,
+                        'is_drink' => $heading === 'Drinks',
+                        'tracks_stock' => $counted,
+                    ]);
                 $isNew = $item->wasRecentlyCreated;
                 $item->update([
                     'is_sellable' => true,
