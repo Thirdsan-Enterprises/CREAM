@@ -89,9 +89,10 @@ class SaleRecordLine {
   factory SaleRecordLine.fromJson(Map<String, dynamic> json) {
     final item = json['item'] as Map<String, dynamic>?;
     return SaleRecordLine(
-      name: json['item_type'] == 'plate'
-          ? 'Plate'
-          : item?['name'] as String? ?? 'Item',
+      // A lunch dish is a plate with a name (Beef); the plain plate has none.
+      name:
+          item?['name'] as String? ??
+          (json['item_type'] == 'plate' ? 'Plate' : 'Item'),
       qty: double.parse(json['qty'].toString()),
       unitPrice: double.parse(json['unit_price'].toString()),
       lineTotal: double.parse(json['line_total'].toString()),

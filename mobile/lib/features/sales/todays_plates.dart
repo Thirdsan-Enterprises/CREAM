@@ -157,7 +157,7 @@ class _TodaysPlatesSheetState extends ConsumerState<_TodaysPlatesSheet> {
                                   ),
                                 ),
                                 Text(
-                                  'Made ${_n(dish.prepared)} · sold ${_n(dish.sold)} · ',
+                                  'Made ${_n(dish.prepared)} · sold ${_n(dish.sold)}',
                                   style: theme.textTheme.bodySmall,
                                 ),
                                 Text(
