@@ -360,6 +360,45 @@ class _KitchenItemsTabState extends ConsumerState<KitchenItemsTab> {
   }
 }
 
+/// Asks for a new kitchen item (name, heading, unit, re-order level) and
+/// creates it. Returns the item, or null when cancelled or refused.
+Future<Item?> addKitchenItem(
+  BuildContext context,
+  WidgetRef ref, {
+  List<String> categories = kitchenCategories,
+  String? name,
+  String? category,
+}) async {
+  final result = await showDialog<_ItemForm>(
+    context: context,
+    builder: (_) => _ItemDialog(
+      categories: categories,
+      initialName: name,
+      initialCategory: category,
+    ),
+  );
+  if (result == null) return null;
+  try {
+    return await ref
+        .read(itemsRepositoryProvider)
+        .createItem(
+          name: result.name,
+          unit: result.unit,
+          category: result.category,
+          safetyStock: result.reorderLevel,
+        );
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e is ApiException ? e.message : 'Could not add item.'),
+        ),
+      );
+    }
+    return null;
+  }
+}
+
 class _ItemForm {
   _ItemForm(this.name, this.unit, this.category, this.reorderLevel);
 
@@ -370,20 +409,64 @@ class _ItemForm {
 }
 
 class _ItemDialog extends StatefulWidget {
-  const _ItemDialog({required this.categories, this.item});
+  const _ItemDialog({
+    required this.categories,
+    this.item,
+    this.initialName,
+    this.initialCategory,
+  });
 
   final List<String> categories;
   final Item? item;
+  final String? initialName;
+  final String? initialCategory;
 
   @override
   State<_ItemDialog> createState() => _ItemDialogState();
 }
 
 class _ItemDialogState extends State<_ItemDialog> {
-  late final _name = TextEditingController(text: widget.item?.name ?? '');
+  late final _name = TextEditingController(
+    text: widget.item?.name ?? widget.initialName ?? '',
+  );
   late final _unit = TextEditingController(text: widget.item?.unit ?? 'kg');
   final _level = TextEditingController();
-  late String _category = widget.item?.category ?? 'Food';
+  late String _category =
+      widget.item?.category ?? widget.initialCategory ?? 'Food';
+  static const _newHeading = '+ New heading…';
+  int _headingAsks = 0;
+
+  Future<void> _askHeading() async {
+    final controller = TextEditingController();
+    final heading = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('New heading'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(hintText: 'e.g. Vegetables'),
+          onSubmitted: (v) => Navigator.pop(context, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Use'),
+          ),
+        ],
+      ),
+    );
+    setState(() {
+      _headingAsks++;
+      if (heading != null && heading.isNotEmpty) _category = heading;
+    });
+  }
+
   String? _error;
 
   @override
@@ -401,22 +484,36 @@ class _ItemDialogState extends State<_ItemDialog> {
               textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(labelText: 'Name'),
             ),
+            const SizedBox(height: 12),
             DropdownButtonFormField<String>(
+              key: ValueKey('heading-$_category-$_headingAsks'),
               initialValue: _category,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Heading'),
               items: [
                 for (final c in {...widget.categories, _category})
                   DropdownMenuItem(value: c, child: Text(c)),
+                const DropdownMenuItem(
+                  value: _newHeading,
+                  child: Text(_newHeading),
+                ),
               ],
-              onChanged: (v) => setState(() => _category = v ?? _category),
+              onChanged: (v) {
+                if (v == _newHeading) {
+                  _askHeading();
+                } else {
+                  setState(() => _category = v ?? _category);
+                }
+              },
             ),
+            const SizedBox(height: 12),
             TextField(
               controller: _unit,
               decoration: const InputDecoration(
                 labelText: 'Unit (kg, litre, packet, piece...)',
               ),
             ),
+            if (!editing) const SizedBox(height: 12),
             if (!editing)
               TextField(
                 controller: _level,

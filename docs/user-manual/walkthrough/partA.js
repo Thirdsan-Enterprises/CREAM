@@ -43,10 +43,10 @@ async function newUser(page, name, phone, password, role, store) {
 
   // A brand-new item
   await L.chooseItem(page, '+new');
-  await L.type(page, 'Item name', 'Sugar');
+  await L.type(page, 'Name', 'Sugar');
   await L.type(page, 'Re-order level (optional)', '5');
   await L.shot(page, '09-add-item');
-  await L.tap(page, 'Add item', { exact: true, wait: 1500 });
+  await page.getByRole('button', { name: 'Add', exact: true }).click(); await L.settle(page, 1500);
   await L.type(page, 'Quantity purchased', '50');
   await L.tap(page, 'Record purchase', { exact: true, wait: 1500 });
   await L.shot(page, '10-new-item-stocked');
