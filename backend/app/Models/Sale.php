@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['store_id', 'sold_by', 'payment_method', 'customer_id', 'total', 'sold_at', 'voided_at', 'voided_by', 'void_reason'])]
+#[Fillable(['store_id', 'sold_by', 'payment_method', 'customer_id', 'total', 'discount', 'discount_note', 'sold_at', 'voided_at', 'voided_by', 'void_reason'])]
 class Sale extends Model
 {
     public const PAYMENT_CASH = 'cash';
@@ -25,6 +25,7 @@ class Sale extends Model
     {
         return [
             'total' => 'decimal:2',
+            'discount' => 'decimal:2',
             'sold_at' => 'datetime',
             'voided_at' => 'datetime',
         ];

@@ -25,6 +25,7 @@ class User {
     required this.role,
     required this.storeId,
     this.store,
+    this.canRecordExpenses = false,
   });
 
   factory User.fromJson(Map<String, dynamic> json) => User(
@@ -36,6 +37,7 @@ class User {
     store: json['store'] != null
         ? Store.fromJson(json['store'] as Map<String, dynamic>)
         : null,
+    canRecordExpenses: json['can_record_expenses'] as bool? ?? false,
   );
 
   final int id;
@@ -45,7 +47,14 @@ class User {
   final int? storeId;
   final Store? store;
 
+  /// Allowed by the owner to record expenses paid from takings.
+  final bool canRecordExpenses;
+
   bool get isAdmin => role == UserRole.admin;
+
+  /// Managers and the owner always; others when the owner allows it.
+  bool get mayRecordExpenses =>
+      isAdmin || role == UserRole.storeManager || canRecordExpenses;
 
   /// True for roles that get the Outlet Terminal experience.
   bool get isOutletStaff => !isAdmin;

@@ -57,10 +57,9 @@ class StockTransfer {
     items: (json['items'] as List<dynamic>? ?? [])
         .map((e) => StockTransferItem.fromJson(e as Map<String, dynamic>))
         .toList(),
-    dispatchedByName:
-        (json['dispatched_by'] as Map<String, dynamic>?)?['name'] as String?,
-    confirmedByName:
-        (json['confirmed_by'] as Map<String, dynamic>?)?['name'] as String?,
+    // A person when the server loaded it, just an id otherwise.
+    dispatchedByName: _personName(json['dispatched_by']),
+    confirmedByName: _personName(json['confirmed_by']),
     confirmedAt: json['confirmed_at'] == null
         ? null
         : DateTime.parse(json['confirmed_at'] as String),
@@ -80,3 +79,6 @@ class StockTransfer {
 
   bool get isReceived => status != 'dispatched';
 }
+
+String? _personName(Object? value) =>
+    value is Map ? value['name'] as String? : null;

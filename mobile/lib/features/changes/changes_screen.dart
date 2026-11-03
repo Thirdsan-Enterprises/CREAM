@@ -48,7 +48,9 @@ class _ChangesScreenState extends ConsumerState<ChangesScreen> {
         subjectType: _type,
       );
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() => setState(() {
+    _future = _load();
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -290,7 +292,13 @@ class ChangeCard extends StatelessWidget {
                               decoration: TextDecoration.lineThrough,
                             ),
                           ),
-                          const TextSpan(text: '  →  '),
+                          const WidgetSpan(
+                            alignment: PlaceholderAlignment.middle,
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 6),
+                              child: Icon(Icons.arrow_forward, size: 14),
+                            ),
+                          ),
                           TextSpan(
                             text: _value(change.field, change.to),
                             style: const TextStyle(fontWeight: FontWeight.w700),

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Expense;
 use App\Models\SaleItem;
 use App\Models\StockMovement;
 use App\Models\StockTransfer;
@@ -131,6 +132,7 @@ class BranchPerformanceService
                     ->values(),
             ],
             'transfers' => $this->transfers($period, $store->id),
+            'expenses' => $this->expenses($period, $store->id),
             'recent_sales' => $this->recentSales($period, $store->id),
         ];
     }
@@ -188,7 +190,7 @@ class BranchPerformanceService
             ->orderBy('sales.sold_at')
             ->get([
                 'sales.id', 'sales.store_id', 'sales.sold_by', 'users.name as sold_by_name',
-                'sales.payment_method', 'sales.total', 'sales.sold_at',
+                'sales.payment_method', 'sales.total', 'sales.discount', 'sales.sold_at',
             ])
             ->map(function ($row) {
                 $row->total = (float) $row->total;
@@ -255,6 +257,7 @@ class BranchPerformanceService
             // Sold on their own, not drinks: eggs, tea...
             'items_sold' => (float) $others->sum('qty'),
             'item_revenue' => (float) $others->sum('line_total'),
+            'discounts' => (float) $sales->sum('discount'),
         ];
     }
 
@@ -345,7 +348,9 @@ class BranchPerformanceService
     /** Every drink and other item sold on its own, with its menu category. */
     private function menuItems(Collection $items): Collection
     {
-        return $items->where('item_type', '!=', SaleItem::TYPE_PLATE)
+        // Lunch dishes are plates with a name (Beef, Fish...); the plain
+        // plate has no item and is reported as plates only.
+        return $items->filter(fn ($row) => $row->item_id !== null)
             ->groupBy('item_id')
             ->map(fn ($g, $itemId) => [
                 'item_id' => (int) $itemId,
@@ -371,6 +376,25 @@ class BranchPerformanceService
             ])
             ->sortByDesc('qty')
             ->values();
+    }
+
+    /** Paid out of the branch's takings in the period. */
+    private function expenses(array $period, int $storeId): array
+    {
+        $rows = Expense::query()->counted()->with('recordedBy:id,name')
+            ->where('store_id', $storeId)
+            ->whereBetween('spent_at', $this->bounds($period))
+            ->orderByDesc('spent_at')->get();
+
+        return [
+            'total' => (float) $rows->sum('amount'),
+            'by_category' => $rows->groupBy('category')
+                ->map(fn ($g, $c) => ['category' => $c, 'total' => (float) $g->sum('amount')])->values(),
+            'rows' => $rows->take(30)->map(fn ($e) => [
+                'amount' => (float) $e->amount, 'category' => $e->category, 'note' => $e->note,
+                'spent_at' => $e->spent_at, 'recorded_by' => $e->recordedBy?->name,
+            ])->values(),
+        ];
     }
 
     private function stockUsed(array $period, int $storeId): Collection

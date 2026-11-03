@@ -7,116 +7,56 @@ import '../../core/api/repositories/stock_repository.dart';
 import '../../core/api/repositories/stores_repository.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/auth/store.dart';
+import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/formatters/date_formatter.dart';
 import '../../shared/models/item.dart';
+import 'kitchen_items.dart';
+import 'purchases_ledger.dart';
 import 'stock_requests.dart';
 import 'transfers_list.dart';
 
-/// Sentinel shown as the first dropdown entry so an item that isn't in the
-/// list yet can be created without leaving the Stocking screen (Settings >
-/// Items still exists for full item management, but forcing a context
-/// switch just to record a purchase of something new is exactly the "we
-/// can't stock or add [an item to the] list" friction being fixed here).
-final _addNewItemSentinel = Item(
-  id: -1,
-  name: '+ Add new item…',
-  unit: '',
-  category: null,
-  isDrink: false,
-  isActive: true,
-);
+/// What the item picker gave back: an item, or a request to add a new one
+/// (with what was typed and the heading being looked at).
+class _Pick {
+  const _Pick.item(Item this.item) : newName = null, newCategory = null;
+  const _Pick.addNew(this.newName, this.newCategory) : item = null;
 
-/// Prompts for a name/unit and creates the item via the API. Returns the
-/// created item, or null if the user cancelled or left a field blank.
-Future<Item?> _promptCreateItem(BuildContext context, WidgetRef ref) async {
-  final nameController = TextEditingController();
-  final unitController = TextEditingController(text: 'kg');
-  final levelController = TextEditingController();
-
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Add new item'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: nameController,
-            autofocus: true,
-            decoration: const InputDecoration(labelText: 'Item name'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: unitController,
-            decoration: const InputDecoration(
-              labelText: 'Unit (kg, litre, piece, bottle...)',
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: levelController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Re-order level (optional)',
-              helperText:
-                  'Shows "Re-Order" when stock falls to this amount or below.',
-              helperMaxLines: 2,
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Add item'),
-        ),
-      ],
-    ),
-  );
-
-  if (confirmed != true ||
-      nameController.text.trim().isEmpty ||
-      unitController.text.trim().isEmpty) {
-    return null;
-  }
-
-  try {
-    return await ref
-        .read(itemsRepositoryProvider)
-        .createItem(
-          name: nameController.text.trim(),
-          unit: unitController.text.trim(),
-          safetyStock: double.tryParse(levelController.text.trim()),
-        );
-  } catch (e) {
-    if (!context.mounted) return null;
-    final message = e is ApiException ? e.message : 'Could not add item.';
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-    return null;
-  }
+  final Item? item;
+  final String? newName;
+  final String? newCategory;
 }
 
-/// Search-as-you-type item chooser. A dropdown of every food and drink in
-/// the business is a long scroll with no way to jump to "Rice".
-Future<Item?> _chooseItem(BuildContext context, List<Item> items) {
-  return showModalBottomSheet<Item>(
+String _headingOf(Item item) =>
+    item.category ?? (item.isDrink ? 'Drinks' : 'Other');
+
+/// Search-as-you-type item chooser, grouped under procurement's headings
+/// (Food, Spices, Packaging...) with a chip per heading, so "Rice" is two
+/// taps away and new items land under the right heading.
+Future<_Pick?> _chooseItem(
+  BuildContext context,
+  List<Item> items, {
+  bool allowNew = true,
+  String Function(Item)? describe,
+}) {
+  return showModalBottomSheet<_Pick>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (context) => _ItemPickerSheet(items: items),
+    builder: (context) =>
+        _ItemPickerSheet(items: items, allowNew: allowNew, describe: describe),
   );
 }
 
 class _ItemPickerSheet extends StatefulWidget {
-  const _ItemPickerSheet({required this.items});
+  const _ItemPickerSheet({
+    required this.items,
+    this.allowNew = true,
+    this.describe,
+  });
 
   final List<Item> items;
+  final bool allowNew;
+  final String Function(Item)? describe;
 
   @override
   State<_ItemPickerSheet> createState() => _ItemPickerSheetState();
@@ -124,19 +64,44 @@ class _ItemPickerSheet extends StatefulWidget {
 
 class _ItemPickerSheetState extends State<_ItemPickerSheet> {
   String _query = '';
+  String? _heading;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final query = _query.trim().toLowerCase();
-    final matches = [
-      for (final item in widget.items)
-        if (query.isEmpty || item.name.toLowerCase().contains(query)) item,
+    final counts = <String, int>{};
+    for (final item in widget.items) {
+      counts.update(_headingOf(item), (n) => n + 1, ifAbsent: () => 1);
+    }
+    final headings = [
+      for (final c in kitchenCategories)
+        if (counts.containsKey(c)) c,
+      ...counts.keys.where((c) => !kitchenCategories.contains(c)),
     ];
+
+    final groups = <String, List<Item>>{};
+    for (final item in widget.items) {
+      final heading = _headingOf(item);
+      if (_heading != null && heading != _heading) continue;
+      if (query.isNotEmpty && !item.name.toLowerCase().contains(query)) {
+        continue;
+      }
+      groups.putIfAbsent(heading, () => []).add(item);
+    }
+    for (final list in groups.values) {
+      list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    }
+    final rows = <Object>[
+      for (final h in headings)
+        if (groups.containsKey(h)) ...[h, ...groups[h]!],
+    ];
+    final typed = _query.trim();
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.7,
+        height: MediaQuery.sizeOf(context).height * 0.8,
         child: Column(
           children: [
             Padding(
@@ -150,25 +115,73 @@ class _ItemPickerSheetState extends State<_ItemPickerSheet> {
                 onChanged: (value) => setState(() => _query = value),
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.add_circle_outline),
-              title: const Text('Add a new item'),
-              onTap: () => Navigator.of(context).pop(_addNewItemSentinel),
+            SizedBox(
+              height: 44,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: [
+                  for (final h in [null, ...headings])
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: ChoiceChip(
+                        label: Text(
+                          h == null
+                              ? 'All (${widget.items.length})'
+                              : '$h (${counts[h]})',
+                        ),
+                        selected: _heading == h,
+                        onSelected: (_) => setState(() => _heading = h),
+                      ),
+                    ),
+                ],
+              ),
             ),
+            if (widget.allowNew)
+              ListTile(
+                leading: const Icon(Icons.add_circle_outline),
+                title: Text(
+                  typed.isEmpty
+                      ? 'Add a new item'
+                      : 'Add "$typed" as a new item',
+                ),
+                subtitle: _heading == null ? null : Text('Under $_heading'),
+                onTap: () => Navigator.of(
+                  context,
+                ).pop(_Pick.addNew(typed.isEmpty ? null : typed, _heading)),
+              ),
             const Divider(height: 1),
             Expanded(
-              child: matches.isEmpty
+              child: rows.isEmpty
                   ? const Center(child: Text('No item with that name.'))
                   : ListView.builder(
-                      itemCount: matches.length,
+                      itemCount: rows.length,
                       itemBuilder: (context, index) {
-                        final item = matches[index];
+                        final row = rows[index];
+                        if (row is String) {
+                          return Container(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+                            child: Text(
+                              '$row (${groups[row]!.length})',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          );
+                        }
+                        final item = row as Item;
                         return ListTile(
+                          dense: true,
                           title: Text(item.name),
                           subtitle: Text(
-                            item.isDrink ? 'Drink · ${item.unit}' : item.unit,
+                            widget.describe?.call(item) ??
+                                (item.isDrink
+                                    ? 'Drink · ${item.unit}'
+                                    : item.unit),
                           ),
-                          onTap: () => Navigator.of(context).pop(item),
+                          onTap: () =>
+                              Navigator.of(context).pop(_Pick.item(item)),
                         );
                       },
                     ),
@@ -196,7 +209,7 @@ class StockingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 6,
+      length: 8,
       child: Column(
         children: [
           Material(
@@ -207,9 +220,11 @@ class StockingScreen extends StatelessWidget {
               tabs: [
                 Tab(text: 'Requests'),
                 Tab(text: 'Purchase'),
+                Tab(text: 'Purchases ledger'),
                 Tab(text: 'Send to branch'),
                 Tab(text: 'Transfers'),
                 Tab(text: 'Branch stock'),
+                Tab(text: 'Items'),
                 Tab(text: 'History'),
               ],
             ),
@@ -219,9 +234,11 @@ class StockingScreen extends StatelessWidget {
               children: [
                 ProcurementRequestsTab(),
                 _PurchaseTab(),
+                PurchasesLedgerTab(),
                 _TransferTab(),
                 TransfersListTab(),
                 BranchStockTab(),
+                KitchenItemsTab(),
                 _HistoryTab(),
               ],
             ),
@@ -248,6 +265,8 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
   Item? _selectedItem;
   final _qtyController = TextEditingController();
   final _noteController = TextEditingController();
+  final _paidController = TextEditingController();
+  final _supplierController = TextEditingController();
   bool _submitting = false;
 
   @override
@@ -257,7 +276,9 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
   }
 
   Future<void> _load() async {
-    final items = await ref.read(itemsRepositoryProvider).items();
+    final items = await ref
+        .read(itemsRepositoryProvider)
+        .items(withDrinks: true);
     final stores = await ref.read(storesRepositoryProvider).all();
     final main = stores.firstWhere((s) => s.isMain);
     if (!mounted) return;
@@ -277,8 +298,17 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
     });
   }
 
-  Future<void> _addNewItem() async {
-    final created = await _promptCreateItem(context, ref);
+  Future<void> _addNewItem({String? name, String? category}) async {
+    final created = await addKitchenItem(
+      context,
+      ref,
+      categories: {
+        ...kitchenCategories,
+        for (final i in _items) _headingOf(i),
+      }.toList(),
+      name: name,
+      category: category,
+    );
     if (created == null) return;
     setState(() {
       _items = [..._items, created];
@@ -319,6 +349,8 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
             storeId: store.id,
             qty: qty,
             note: _noteController.text.isEmpty ? null : _noteController.text,
+            totalCost: double.tryParse(_paidController.text.trim()),
+            supplier: _supplierController.text.trim(),
           );
 
       // Read the balance back so the person sees the stock really went in.
@@ -341,6 +373,7 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
       setState(() {
         _qtyController.clear();
         _noteController.clear();
+        _paidController.clear();
         _selectedItem = null;
       });
     } catch (e) {
@@ -351,10 +384,22 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
     }
   }
 
+  /// "UGX 4,200 per kg", once the quantity and amount are typed.
+  String? _unitCostHint() {
+    final qty = double.tryParse(_qtyController.text.trim());
+    final paid = double.tryParse(_paidController.text.trim());
+    if (qty == null || qty <= 0 || paid == null) {
+      return 'Goes in the purchases ledger.';
+    }
+    return '${CurrencyFormatter.format(paid / qty)} per ${_selectedItem?.unit ?? 'unit'}';
+  }
+
   @override
   void dispose() {
     _qtyController.dispose();
     _noteController.dispose();
+    _paidController.dispose();
+    _supplierController.dispose();
     super.dispose();
   }
 
@@ -380,13 +425,14 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
               InkWell(
                 borderRadius: BorderRadius.circular(10),
                 onTap: () async {
-                  final value = await _chooseItem(context, _items);
-                  if (value == null) return;
-                  if (value.id == _addNewItemSentinel.id) {
-                    _addNewItem();
+                  final pick = await _chooseItem(context, _items);
+                  if (pick == null) return;
+                  final item = pick.item;
+                  if (item == null) {
+                    _addNewItem(name: pick.newName, category: pick.newCategory);
                     return;
                   }
-                  setState(() => _selectedItem = value);
+                  setState(() => _selectedItem = item);
                 },
                 child: InputDecorator(
                   decoration: const InputDecoration(
@@ -420,6 +466,25 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Quantity purchased',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _paidController,
+                keyboardType: TextInputType.number,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: 'Amount paid in total',
+                  prefixText: 'UGX ',
+                  helperText: _unitCostHint(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _supplierController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Bought from (supplier, market)',
                 ),
               ),
               const SizedBox(height: 12),
@@ -577,22 +642,34 @@ class _TransferTabState extends ConsumerState<_TransferTab> {
                         flex: 2,
                         child: _items.isEmpty
                             ? Text('$_mainName has no stock yet.')
-                            : DropdownButtonFormField<Item>(
-                                initialValue: line.item,
-                                decoration: const InputDecoration(
-                                  labelText: 'Item',
+                            : InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                onTap: () async {
+                                  final pick = await _chooseItem(
+                                    context,
+                                    _items,
+                                    allowNew: false,
+                                    describe: (item) =>
+                                        '${_balances[item.id]?.toStringAsFixed(0)} ${item.unit} available',
+                                  );
+                                  final item = pick?.item;
+                                  if (item != null) {
+                                    setState(() => line.item = item);
+                                  }
+                                },
+                                child: InputDecorator(
+                                  decoration: InputDecoration(
+                                    labelText: 'Item',
+                                    suffixIcon: const Icon(Icons.search),
+                                    helperText: line.item == null
+                                        ? null
+                                        : '${_balances[line.item!.id]?.toStringAsFixed(0)} ${line.item!.unit} available',
+                                  ),
+                                  child: Text(
+                                    line.item?.name ?? 'Tap to choose',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                                items: [
-                                  for (final item in _items)
-                                    DropdownMenuItem(
-                                      value: item,
-                                      child: Text(
-                                        '${item.name} (${_balances[item.id]?.toStringAsFixed(0)} ${item.unit} available)',
-                                      ),
-                                    ),
-                                ],
-                                onChanged: (value) =>
-                                    setState(() => line.item = value),
                               ),
                       ),
                       const SizedBox(width: 8),
@@ -646,8 +723,9 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
     _future = ref.read(stockRepositoryProvider).movements();
   }
 
-  void _reload() =>
-      setState(() => _future = ref.read(stockRepositoryProvider).movements());
+  void _reload() => setState(() {
+    _future = ref.read(stockRepositoryProvider).movements();
+  });
 
   @override
   Widget build(BuildContext context) {

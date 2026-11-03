@@ -34,6 +34,7 @@ class MenuEntry {
     this.balance,
     String? category,
     this.tracksStock = true,
+    this.dailyStock = false,
   }) : category = category ?? (item.isDrink ? 'Drinks' : 'Other');
 
   factory MenuEntry.fromJson(Map<String, dynamic> json) => MenuEntry(
@@ -42,6 +43,7 @@ class MenuEntry {
     balance: (json['balance'] as num?)?.toDouble(),
     category: json['category'] as String?,
     tracksStock: json['tracks_stock'] as bool? ?? true,
+    dailyStock: json['daily_stock'] as bool? ?? false,
   );
 
   final Item item;
@@ -52,6 +54,9 @@ class MenuEntry {
 
   /// False for things made to order (a cup of tea): never limited by stock.
   final bool tracksStock;
+
+  /// Plates counted per day (lunch): [balance] is what is left today.
+  final bool dailyStock;
 
   /// How many this branch has in stock; null when it doesn't track stock or
   /// the branch isn't known.
@@ -92,6 +97,7 @@ class BranchPrice {
     required this.storeName,
     required this.price,
     required this.own,
+    this.onMenu = true,
   });
 
   factory BranchPrice.fromJson(Map<String, dynamic> json) => BranchPrice(
@@ -99,12 +105,16 @@ class BranchPrice {
     storeName: json['store_name'] as String,
     price: (json['price'] as num?)?.toDouble(),
     own: json['own'] as bool? ?? false,
+    onMenu: json['on_menu'] as bool? ?? true,
   );
 
   final int storeId;
   final String storeName;
   final double? price;
   final bool own;
+
+  /// Whether this branch sells the item.
+  final bool onMenu;
 }
 
 class PricedThing {
@@ -121,6 +131,7 @@ class MenuPriceRow extends PricedThing {
     required this.item,
     required this.category,
     required this.tracksStock,
+    this.dailyStock = false,
     required this.isActive,
     required super.defaultPrice,
     required super.branches,
@@ -130,6 +141,7 @@ class MenuPriceRow extends PricedThing {
     item: Item.fromJson(json['item'] as Map<String, dynamic>),
     category: json['category'] as String? ?? 'Other',
     tracksStock: json['tracks_stock'] as bool? ?? true,
+    dailyStock: json['daily_stock'] as bool? ?? false,
     isActive: json['is_active'] as bool? ?? true,
     defaultPrice: (json['default'] as num?)?.toDouble(),
     branches: _branches(json['branches']),
@@ -138,6 +150,9 @@ class MenuPriceRow extends PricedThing {
   final Item item;
   final String category;
   final bool tracksStock;
+
+  /// Plates counted per day (Today's plates).
+  final bool dailyStock;
   final bool isActive;
 }
 

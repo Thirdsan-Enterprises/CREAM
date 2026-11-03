@@ -12,6 +12,7 @@ class ManagedUser {
     required this.role,
     required this.store,
     required this.isActive,
+    this.canRecordExpenses = false,
   });
 
   factory ManagedUser.fromJson(Map<String, dynamic> json) => ManagedUser(
@@ -23,6 +24,7 @@ class ManagedUser {
         ? Store.fromJson(json['store'] as Map<String, dynamic>)
         : null,
     isActive: json['is_active'] as bool? ?? true,
+    canRecordExpenses: json['can_record_expenses'] as bool? ?? false,
   );
 
   final int id;
@@ -31,6 +33,7 @@ class ManagedUser {
   final String role;
   final Store? store;
   final bool isActive;
+  final bool canRecordExpenses;
 }
 
 class UsersRepository {
@@ -51,10 +54,12 @@ class UsersRepository {
     required String password,
     required String role,
     int? storeId,
+    bool canRecordExpenses = false,
   }) async {
     final body = await _api.post(
       '/users',
       data: {
+        'can_record_expenses': canRecordExpenses,
         'name': name,
         'phone': phone,
         'password': password,
@@ -73,6 +78,7 @@ class UsersRepository {
     String? role,
     int? storeId,
     bool? isActive,
+    bool? canRecordExpenses,
   }) async {
     final body = await _api.patch(
       '/users/$userId',
@@ -85,6 +91,7 @@ class UsersRepository {
         // switching a user's role to admin — can send store_id: null.
         if (role != null) 'store_id': storeId,
         if (isActive != null) 'is_active': isActive,
+        'can_record_expenses': ?canRecordExpenses,
       },
     );
     return ManagedUser.fromJson(body);

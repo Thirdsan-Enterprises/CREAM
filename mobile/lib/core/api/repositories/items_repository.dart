@@ -29,10 +29,14 @@ class ItemsRepository {
     required double price,
     int? storeId,
     required bool tracksStock,
+    bool dailyStock = false,
+    List<int>? soldAt,
   }) {
     return _api.post(
       '/menu-items',
       data: {
+        // Null: sold at every branch.
+        'branches': ?soldAt,
         'item_id': ?itemId,
         'name': ?name,
         'unit': ?unit,
@@ -40,6 +44,7 @@ class ItemsRepository {
         'price': price,
         'store_id': ?storeId,
         'tracks_stock': tracksStock,
+        'daily_stock': dailyStock,
       },
     );
   }
@@ -53,13 +58,17 @@ class ItemsRepository {
     double? price,
     int? storeId,
     bool? tracksStock,
+    bool? dailyStock,
     bool? isActive,
     bool useDefault = false,
+    List<int>? soldAt,
+    bool soldEverywhere = false,
     required String reason,
   }) {
     return _api.patch(
       '/menu-items/$itemId',
       data: {
+        if (soldEverywhere) 'branches': null else 'branches': ?soldAt,
         if (useDefault) 'use_default': true,
         'reason': reason,
         'name': ?name,
@@ -67,6 +76,7 @@ class ItemsRepository {
         'price': ?price,
         'store_id': ?storeId,
         'tracks_stock': ?tracksStock,
+        'daily_stock': ?dailyStock,
         'is_active': ?isActive,
       },
     );
@@ -80,8 +90,20 @@ class ItemsRepository {
     return (body['price'] as num).toDouble();
   }
 
-  Future<List<Item>> items() async {
-    final body = await _api.get('/items');
+  /// Kitchen stock items (what procurement buys). [includeRemoved] adds
+  /// items taken off the list, so they can be added back.
+  Future<List<Item>> items({
+    bool includeRemoved = false,
+    bool withDrinks = false,
+  }) async {
+    final body = await _api.get(
+      '/items',
+      query: {
+        if (includeRemoved) 'include_removed': '1',
+        // Branches buy their own drinks: the purchase screen lists them.
+        if (withDrinks) 'with_drinks': '1',
+      },
+    );
     return (body['data'] as List<dynamic>)
         .map((e) => Item.fromJson(e as Map<String, dynamic>))
         .toList();
@@ -92,6 +114,7 @@ class ItemsRepository {
     required String unit,
     bool isDrink = false,
     double? safetyStock,
+    String? category,
   }) async {
     final body = await _api.post(
       '/items',
@@ -100,9 +123,38 @@ class ItemsRepository {
         'unit': unit,
         'is_drink': isDrink,
         'safety_stock': ?safetyStock,
+        'category': ?category,
       },
     );
     return Item.fromJson(body);
+  }
+
+  /// Renames, regroups or restores a kitchen stock item.
+  Future<void> updateItem(
+    int itemId, {
+    String? name,
+    String? unit,
+    String? category,
+    bool? isActive,
+    String? reason,
+  }) {
+    return _api.patch(
+      '/items/$itemId',
+      data: {
+        'name': ?name,
+        'unit': ?unit,
+        'category': ?category,
+        'is_active': ?isActive,
+        'reason': ?reason,
+      },
+    );
+  }
+
+  /// Takes an item off the list. Returns the server's explanation (deleted,
+  /// or kept for the records).
+  Future<String> removeItem(int itemId, {required String reason}) async {
+    final body = await _api.delete('/items/$itemId', data: {'reason': reason});
+    return body['message'] as String? ?? 'Removed.';
   }
 
   Future<void> setStoreSettings({

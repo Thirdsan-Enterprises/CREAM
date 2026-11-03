@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:cream_pos/core/api/repositories/branch_reports_repository.dart';
+import 'package:cream_pos/core/api/repositories/operations_repository.dart';
 import 'package:cream_pos/shared/models/stock_transfer.dart';
 import 'package:cream_pos/shared/pdf/cream_documents.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -129,5 +130,113 @@ void main() {
     expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
     final out = Platform.environment['PDF_OUT'];
     if (out != null) File('$out/branch.pdf').writeAsBytesSync(bytes);
+  });
+
+  test('a cashier day report renders', () async {
+    final day = DayReport.fromJson({
+      'date': '2026-11-05',
+      'scope': 'person',
+      'person': {'id': 7, 'name': 'Joy Akello', 'role': 'cashier'},
+      'store': {'id': 3, 'name': 'Town'},
+      'sales_count': 31,
+      'gross': 392000,
+      'discounts': 2000,
+      'total': 390000,
+      'plates': 28,
+      'by_payment': [
+        {'method': 'cash', 'count': 22, 'total': 270000},
+        {'method': 'momo', 'count': 9, 'total': 120000},
+      ],
+      'items': [
+        {'name': 'Beef', 'category': 'Lunch', 'qty': 14, 'revenue': 140000},
+        {'name': 'Fish', 'category': 'Lunch', 'qty': 8, 'revenue': 96000},
+        {'name': 'Peas', 'category': 'Lunch', 'qty': 6, 'revenue': 54000},
+        {
+          'name': 'Milk Tea',
+          'category': 'Breakfast',
+          'qty': 12,
+          'revenue': 36000,
+        },
+        {
+          'name': 'Chapati',
+          'category': 'Breakfast',
+          'qty': 20,
+          'revenue': 30000,
+        },
+        {'name': 'Soda', 'category': 'Drinks', 'qty': 24, 'revenue': 36000},
+      ],
+      'discounted_sales': [
+        {
+          'id': 4,
+          'discount': 2000,
+          'note': 'Regular customer',
+          'sold_at': '2026-11-05T10:00:00Z',
+        },
+      ],
+      'cancelled_sales': [
+        {
+          'id': 9,
+          'total': 10000,
+          'reason': 'Rang twice',
+          'sold_at': '2026-11-05T11:00:00Z',
+        },
+      ],
+      'expenses': [
+        {
+          'id': 1,
+          'amount': 5000,
+          'category': 'Transport',
+          'note': 'Boda to market',
+          'paid_from': 'cash',
+          'spent_at': '2026-11-05T08:00:00Z',
+          'recorded_by': 'Joy Akello',
+        },
+        {
+          'id': 2,
+          'amount': 3000,
+          'category': 'Small purchases',
+          'note': 'Matches',
+          'paid_from': 'cash',
+          'spent_at': '2026-11-05T09:00:00Z',
+          'recorded_by': 'Joy Akello',
+        },
+      ],
+      'expenses_total': 8000,
+      'cash_sales': 270000,
+      'cash_expenses': 8000,
+      'cash_to_hand_over': 262000,
+    });
+    final bytes = await dayReportPdf(day, printedBy: 'Joy Akello');
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+    final out = Platform.environment['PDF_OUT'];
+    if (out != null) File('$out/day.pdf').writeAsBytesSync(bytes);
+  });
+
+  test('a customer receipt renders on a till roll', () async {
+    final receipt = Receipt.fromJson({
+      'number': 1042,
+      'sold_at': '2026-11-05T10:15:00Z',
+      'store': {
+        'name': 'Town',
+        'address': 'Kampala Road',
+        'phone': '0700000000',
+      },
+      'cashier': 'Joy Akello',
+      'lines': [
+        {'name': 'Beef', 'qty': 2, 'unit_price': 25000, 'total': 50000},
+        {'name': 'Passion Juice', 'qty': 1, 'unit_price': 5000, 'total': 5000},
+      ],
+      'subtotal': 55000,
+      'discount': 5000,
+      'discount_note': 'Regular customer',
+      'total': 50000,
+      'payment_method': 'cash',
+      'customer': null,
+      'voided': false,
+    });
+    final bytes = await receiptPdf(receipt, cashReceived: 60000);
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+    final out = Platform.environment['PDF_OUT'];
+    if (out != null) File('$out/receipt.pdf').writeAsBytesSync(bytes);
   });
 }

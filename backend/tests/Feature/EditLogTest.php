@@ -107,6 +107,8 @@ class EditLogTest extends TestCase
     {
         $saleId = $this->sell();
 
+        // After 15 minutes the cashier can no longer cancel it.
+        $this->travel(20)->minutes();
         $this->actingAs($this->cashier)->postJson("/api/sales/{$saleId}/void", ['reason' => 'Oops'])->assertForbidden();
         $this->actingAs($this->manager)->postJson("/api/sales/{$saleId}/void", [])
             ->assertUnprocessable()->assertJsonPath('errors.reason.0', 'Say why this sale is being voided.');
@@ -118,6 +120,17 @@ class EditLogTest extends TestCase
         $this->actingAs($this->manager)->postJson("/api/sales/{$saleId}/void", ['reason' => 'Double'])->assertOk();
         $this->actingAs($this->owner)->postJson("/api/sales/{$saleId}/void", ['reason' => 'Again'])->assertUnprocessable();
         $this->assertEquals(10, app(StockService::class)->balance($this->soda->id, $this->town->id), 'stock returned once only');
+    }
+
+    public function test_a_cashier_cancels_their_own_sale_within_fifteen_minutes(): void
+    {
+        $saleId = $this->sell();
+        $other = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $this->town->id]);
+        $this->actingAs($other)->postJson("/api/sales/{$saleId}/void", ['reason' => 'Not mine'])->assertForbidden();
+
+        $this->travel(10)->minutes();
+        $this->actingAs($this->cashier)->postJson("/api/sales/{$saleId}/void", ['reason' => 'Customer changed their mind'])->assertOk();
+        $this->assertEquals(10, app(StockService::class)->balance($this->soda->id, $this->town->id));
     }
 
     public function test_a_stock_correction_is_logged_with_the_balance_before_and_after(): void

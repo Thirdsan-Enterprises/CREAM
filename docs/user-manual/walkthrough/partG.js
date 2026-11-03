@@ -12,10 +12,14 @@ const L = require('./lib');
   await L.shot(page, '38-edit-user');
   await L.tap(page, 'Save changes', { exact: true, wait: 1800 });
 
-  await L.tap(page, 'Plate price', { exact: true, wait: 1200 });
-  await L.type(page, 'New price', '26000');
+  await L.tap(page, 'Prices & menu', { exact: true, wait: 1500 });
+  await L.dump(page, 'prices tab');
+  await page.getByRole('button', { name: /^Plate/ }).first().click({ timeout: 8000 });
+  await L.settle(page, 900);
+  await L.type(page, 'Price', '26000');
+  await L.type(page, 'Reason for the change', 'New prices from November');
   await L.shot(page, '39-plate-price');
-  await L.tap(page, 'Update price', { exact: true, wait: 1800 });
+  await L.tap(page, 'Save price', { exact: true, wait: 1800 });
   await L.dump(page, 'plate price after');
 
   await L.tap(page, 'Branches', { exact: true, wait: 1200 });

@@ -35,7 +35,9 @@ class _BackOfficeSalesScreenState extends ConsumerState<BackOfficeSalesScreen> {
     return (summary, list);
   }
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() => setState(() {
+    _future = _load();
+  });
 
   Future<void> _pickDateRange() async {
     final range = await showDateRangePicker(

@@ -8,15 +8,16 @@ const L = require('./lib');
   await page.getByRole('button', { name: /^Kampala Law/ }).first().click();
   await L.settle(page, 1200);
   await L.type(page, 'Reference', 'MoMo ref 48213');
-  await L.type(page, 'Deposit amount', '100000');
+  await L.type(page, 'Amount', '100000');
   await L.shot(page, '31-deposit');
-  await L.tap(page, 'Deposit', { exact: true, wait: 1800 });
+  await L.tap(page, 'Save', { exact: true, wait: 1800 });
   await L.dump(page, 'after deposit');
   await L.shot(page, '32-deposit-done');
   await page.mouse.click(195, 90);   // tap outside the sheet to close it
   await L.settle(page, 800);
 
   await L.tap(page, 'Sell', { exact: true, wait: 800 });
+  await L.tap(page, 'One more plate', { exact: true, wait: 400 });
   await L.tap(page, 'One more plate', { exact: true, wait: 400 });
   await L.tap(page, 'Account', { exact: true, wait: 800 });
   await L.tap(page, 'Select customer', { exact: true, wait: 1000 });

@@ -8,7 +8,7 @@ const L = require('./lib');
 
   await L.tap(page, 'Stock', { exact: true });
   await L.shot(page, '15-manager-stock');
-  await L.tap(page, 'Incoming Transfers', { exact: false });
+  await L.tap(page, 'Incoming', { exact: true });
   await L.type(page, 'Receiv', '38', 0);   // 2 kg of rice short
   await L.shot(page, '16-confirm-receipt');
   await L.tap(page, 'Confirm receipt', { exact: true, wait: 1800 });
@@ -31,6 +31,7 @@ const L = require('./lib');
   await L.type(page, 'Search items', 'Rice');
   await page.getByRole('button', { name: /^Rice/ }).first().click({ timeout: 8000 });
   await L.settle(page, 800);
+  await L.tap(page, 'Log what was used (Stock Out)', { exact: true });
   await L.type(page, 'Quantity used', '8');
   await L.shot(page, '22a-log-use');
   await L.tap(page, 'Save', { exact: true, wait: 1800 });

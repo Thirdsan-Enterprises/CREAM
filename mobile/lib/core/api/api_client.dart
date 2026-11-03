@@ -62,6 +62,11 @@ class ApiClient {
     return _asMap(response.data);
   }
 
+  Future<Map<String, dynamic>> delete(String path, {Object? data}) async {
+    final response = await _guard(() => _dio.delete(path, data: data));
+    return _asMap(response.data);
+  }
+
   Future<Response> _guard(Future<Response> Function() call) async {
     try {
       return await call();

@@ -35,10 +35,12 @@ class StockRequest {
       storeId = json['store_id'] as int,
       storeName =
           (json['store'] as Map<String, dynamic>?)?['name'] as String? ?? '',
-      requestedByName =
-          (json['requested_by'] as Map<String, dynamic>?)?['name'] as String?,
-      respondedByName =
-          (json['responded_by'] as Map<String, dynamic>?)?['name'] as String?,
+      requestedByName = (json['requested_by'] is Map
+          ? json['requested_by']['name'] as String?
+          : null),
+      respondedByName = (json['responded_by'] is Map
+          ? json['responded_by']['name'] as String?
+          : null),
       status = json['status'] as String,
       note = json['note'] as String?,
       responseNote = json['response_note'] as String?,

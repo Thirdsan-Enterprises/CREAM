@@ -117,8 +117,10 @@ class ProcurementTest extends TestCase
             'items' => [['item_id' => $this->rice->id, 'qty' => 5]],
         ])->assertCreated()->json('id');
 
-        $this->actingAs($lugogoCashier)->getJson('/api/stock-requests')->assertJsonCount(0, 'data');
-        $this->actingAs($lugogoCashier)->getJson("/api/stock-requests/{$id}")->assertForbidden();
+        $lugogoManager = User::factory()->create(['role' => User::ROLE_STORE_MANAGER, 'store_id' => $lugogo->id]);
+        $this->actingAs($lugogoManager)->getJson('/api/stock-requests')->assertJsonCount(0, 'data');
+        $this->actingAs($lugogoManager)->getJson("/api/stock-requests/{$id}")->assertForbidden();
+        $this->actingAs($lugogoCashier)->getJson('/api/stock-requests')->assertForbidden();
         $this->actingAs($this->townManager)->postJson("/api/stock-requests/{$id}/decline", ['reason' => 'x'])->assertForbidden();
 
         $this->actingAs($this->procurement)->postJson("/api/stock-requests/{$id}/decline", [])

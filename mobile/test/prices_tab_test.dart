@@ -58,7 +58,7 @@ void main() {
     expect(find.text('other branches'), findsOneWidget);
     expect(find.text('Town UGX 15,000'), findsOneWidget);
     expect(find.text('Breakfast'), findsOneWidget);
-    expect(find.text('Made to order'), findsOneWidget);
+    expect(find.textContaining('Made to order'), findsOneWidget);
 
     // Tapping Town's chip opens the price sheet on Town, asking for a reason.
     await tester.tap(find.text('Town UGX 15,000'));

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DrinkPrice;
 use App\Models\Item;
+use App\Models\ItemStoreSetting;
 use App\Models\PlatePrice;
 use App\Models\Store;
 use App\Services\PricingService;
@@ -33,8 +34,12 @@ class PriceListController extends Controller
 
         $items = Item::query()
             ->where(fn ($q) => $q->where('is_sellable', true)->orWhere('is_drink', true))
-            ->orderBy('sell_category')->orderBy('name')
-            ->get();
+            ->orderBy('name')
+            ->get()
+            ->sortBy(fn (Item $item) => [MenuController::headingOrder($item), $item->name])
+            ->values();
+        $offMenu = ItemStoreSetting::where('on_menu', false)->get(['item_id', 'store_id'])
+            ->groupBy('item_id')->map(fn ($rows) => $rows->pluck('store_id')->flip());
         $itemOwn = DrinkPrice::whereNotNull('store_id')->where('is_active', true)
             ->get(['item_id', 'store_id'])
             ->groupBy('item_id')
@@ -47,6 +52,7 @@ class PriceListController extends Controller
                 'item' => $item,
                 'category' => $item->sell_category ?? ($item->is_drink ? 'Drinks' : 'Other'),
                 'tracks_stock' => (bool) $item->tracks_stock,
+                'daily_stock' => (bool) $item->daily_stock,
                 'is_active' => (bool) $item->is_active,
                 'default' => $this->pricingService->currentItemPrice($item->id, null),
                 'branches' => $stores->map(fn (Store $store) => [
@@ -54,6 +60,7 @@ class PriceListController extends Controller
                     'store_name' => $store->name,
                     'price' => $this->pricingService->currentItemPrice($item->id, $store->id),
                     'own' => isset($itemOwn[$item->id]) && $itemOwn[$item->id]->has($store->id),
+                    'on_menu' => ! (isset($offMenu[$item->id]) && $offMenu[$item->id]->has($store->id)),
                 ])->values(),
             ])->values(),
         ]);

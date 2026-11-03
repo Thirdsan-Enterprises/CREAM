@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/api/repositories/items_repository.dart';
 import '../../core/api/repositories/stores_repository.dart';
 import '../../core/api/repositories/users_repository.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/auth/store.dart';
-import '../../shared/models/item.dart';
+import '../stock/kitchen_items.dart';
 import 'prices_tab.dart';
 
 const _roles = ['admin', 'store_manager', 'cashier', 'storekeeper'];
@@ -39,14 +38,19 @@ class SettingsScreen extends StatelessWidget {
               tabs: [
                 Tab(text: 'Branches'),
                 Tab(text: 'Users'),
-                Tab(text: 'Items'),
+                Tab(text: 'Kitchen stock'),
                 Tab(text: 'Prices & menu'),
               ],
             ),
           ),
           const Expanded(
             child: TabBarView(
-              children: [_StoresTab(), _UsersTab(), _ItemsTab(), PricesTab()],
+              children: [
+                _StoresTab(),
+                _UsersTab(),
+                KitchenItemsTab(),
+                PricesTab(),
+              ],
             ),
           ),
         ],
@@ -71,8 +75,9 @@ class _StoresTabState extends ConsumerState<_StoresTab> {
     _future = ref.read(storesRepositoryProvider).all();
   }
 
-  void _reload() =>
-      setState(() => _future = ref.read(storesRepositoryProvider).all());
+  void _reload() => setState(() {
+    _future = ref.read(storesRepositoryProvider).all();
+  });
 
   Future<void> _createStore() async {
     final nameController = TextEditingController();
@@ -256,8 +261,9 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
     _future = ref.read(usersRepositoryProvider).all();
   }
 
-  void _reload() =>
-      setState(() => _future = ref.read(usersRepositoryProvider).all());
+  void _reload() => setState(() {
+    _future = ref.read(usersRepositoryProvider).all();
+  });
 
   Future<void> _createUser() async {
     final created = await showModalBottomSheet<bool>(
@@ -345,6 +351,7 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
   final _passwordController = TextEditingController();
   late String _role = widget.user.role;
   late Store? _store = widget.user.store;
+  late bool _canRecordExpenses = widget.user.canRecordExpenses;
   bool _submitting = false;
   late Future<List<Store>> _storesFuture;
 
@@ -390,6 +397,7 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
             storeId: _role == 'admin' || _role == 'storekeeper'
                 ? null
                 : _store?.id,
+            canRecordExpenses: _canRecordExpenses,
           );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -462,6 +470,17 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
                     'branches and answers their requests. Cannot sell.',
                   ),
                 ),
+              if (_role == 'cashier')
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _canRecordExpenses,
+                  title: const Text('Can record expenses'),
+                  subtitle: const Text(
+                    'Transport, small purchases paid from the takings. '
+                    'Managers always can.',
+                  ),
+                  onChanged: (v) => setState(() => _canRecordExpenses = v),
+                ),
               if (_role != 'admin' && _role != 'storekeeper') ...[
                 const SizedBox(height: 12),
                 DropdownButtonFormField<Store>(
@@ -508,6 +527,7 @@ class _NewUserSheetState extends ConsumerState<_NewUserSheet> {
   final _passwordController = TextEditingController();
   String _role = 'cashier';
   Store? _store;
+  bool _canRecordExpenses = false;
   bool _submitting = false;
   late Future<List<Store>> _storesFuture;
 
@@ -539,6 +559,7 @@ class _NewUserSheetState extends ConsumerState<_NewUserSheet> {
             storeId: _role == 'admin' || _role == 'storekeeper'
                 ? null
                 : _store?.id,
+            canRecordExpenses: _canRecordExpenses,
           );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -609,6 +630,17 @@ class _NewUserSheetState extends ConsumerState<_NewUserSheet> {
                     'branches and answers their requests. Cannot sell.',
                   ),
                 ),
+              if (_role == 'cashier')
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _canRecordExpenses,
+                  title: const Text('Can record expenses'),
+                  subtitle: const Text(
+                    'Transport, small purchases paid from the takings. '
+                    'Managers always can.',
+                  ),
+                  onChanged: (v) => setState(() => _canRecordExpenses = v),
+                ),
               if (_role != 'admin' && _role != 'storekeeper') ...[
                 const SizedBox(height: 12),
                 DropdownButtonFormField<Store>(
@@ -635,179 +667,6 @@ class _NewUserSheetState extends ConsumerState<_NewUserSheet> {
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-class _ItemsTab extends ConsumerStatefulWidget {
-  const _ItemsTab();
-
-  @override
-  ConsumerState<_ItemsTab> createState() => _ItemsTabState();
-}
-
-class _ItemsTabState extends ConsumerState<_ItemsTab> {
-  late Future<List<Item>> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = ref.read(itemsRepositoryProvider).items();
-  }
-
-  void _reload() =>
-      setState(() => _future = ref.read(itemsRepositoryProvider).items());
-
-  Future<void> _createItem() async {
-    final nameController = TextEditingController();
-    final unitController = TextEditingController();
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('New item'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'Name'),
-            ),
-            TextField(
-              controller: unitController,
-              decoration: const InputDecoration(
-                labelText: 'Unit (kg, piece, ...)',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true ||
-        nameController.text.isEmpty ||
-        unitController.text.isEmpty) {
-      return;
-    }
-    await ref
-        .read(itemsRepositoryProvider)
-        .createItem(name: nameController.text, unit: unitController.text);
-    _reload();
-  }
-
-  Future<void> _setSafetyStock(Item item) async {
-    final stores = await ref.read(storesRepositoryProvider).all();
-    if (!mounted) return;
-
-    Store? selectedStore = stores.firstOrNull;
-    final controller = TextEditingController(text: '0');
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('Re-order level — ${item.name}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<Store>(
-                initialValue: selectedStore,
-                decoration: const InputDecoration(labelText: 'Branch'),
-                items: [
-                  for (final store in stores)
-                    DropdownMenuItem(value: store, child: Text(store.name)),
-                ],
-                onChanged: (value) =>
-                    setDialogState(() => selectedStore = value),
-              ),
-              TextField(
-                controller: controller,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Re-order level',
-                  helperText:
-                      'Shows "Re-Order" when stock is at or below this.',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    final safetyStock = double.tryParse(controller.text);
-    if (confirmed != true || selectedStore == null || safetyStock == null) {
-      return;
-    }
-
-    await ref
-        .read(itemsRepositoryProvider)
-        .setStoreSettings(
-          itemId: item.id,
-          storeId: selectedStore!.id,
-          safetyStock: safetyStock,
-        );
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Re-order level updated.')));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: FutureBuilder<List<Item>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final items = snapshot.data!;
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: items.length,
-            itemBuilder: (context, index) {
-              final item = items[index];
-              return Card(
-                child: ListTile(
-                  title: Text(item.name),
-                  subtitle: Text(item.unit),
-                  trailing: TextButton(
-                    onPressed: () => _setSafetyStock(item),
-                    child: const Text('Re-order level'),
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _createItem,
-        icon: const Icon(Icons.add),
-        label: const Text('New item'),
       ),
     );
   }

@@ -67,7 +67,8 @@ class BranchTotals {
       drinksSold = _num(json['drinks_sold']),
       drinkRevenue = _num(json['drink_revenue']),
       itemsSold = _num(json['items_sold']),
-      itemRevenue = _num(json['item_revenue']);
+      itemRevenue = _num(json['item_revenue']),
+      discounts = _num(json['discounts']);
 
   final double revenue;
   final double previousRevenue;
@@ -84,6 +85,9 @@ class BranchTotals {
   /// Breakfast and other menu items, besides plates and drinks.
   final double itemsSold;
   final double itemRevenue;
+
+  /// Given off sales in the period (with a note on each sale).
+  final double discounts;
 }
 
 /// One bar of a daily or hourly series. [byStore] is only filled on the
@@ -286,6 +290,19 @@ class BranchDetail {
           .toInt(),
       transfersAwaiting = (json['transfers']['awaiting_confirmation'] as num)
           .toInt(),
+      expensesTotal = _num((json['expenses'] as Map?)?['total']),
+      expenses =
+          (((json['expenses'] as Map?)?['rows'] as List<dynamic>?) ?? const [])
+              .map((e) {
+                final m = e as Map<String, dynamic>;
+                return NamedAmount(
+                  name: '${m['category']}: ${m['note'] ?? ''}',
+                  revenue: _num(m['amount']),
+                  count: 1,
+                  category: m['recorded_by'] as String?,
+                );
+              })
+              .toList(),
       recentSales = (json['recent_sales'] as List<dynamic>)
           .map((e) => RecentSale.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -307,6 +324,10 @@ class BranchDetail {
   final int transfersWithDiscrepancy;
   final int transfersAwaiting;
   final List<RecentSale> recentSales;
+
+  /// Paid out of the takings (transport, small purchases).
+  final double expensesTotal;
+  final List<NamedAmount> expenses;
 }
 
 class BranchReportsRepository {

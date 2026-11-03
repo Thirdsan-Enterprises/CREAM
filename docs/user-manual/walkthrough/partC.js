@@ -6,6 +6,7 @@ const L = require('./lib');
   await L.settle(page, 1500);
   await L.shot(page, '22-sell');
   await L.tap(page, 'One more plate', { exact: true, wait: 400 });
+  await L.tap(page, 'One more plate', { exact: true, wait: 400 });
   await page.getByRole('button', { name: /Soda UGX/ }).first().click();
   await L.settle(page, 400);
   await page.getByRole('group', { name: /^Soda/ }).first().click();   // tap the tile again for a second soda

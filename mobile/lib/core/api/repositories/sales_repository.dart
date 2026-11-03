@@ -14,10 +14,14 @@ class SalesRepository {
     int? customerId,
     int? storeId,
     required List<SaleLine> lines,
+    double discount = 0,
+    String? discountNote,
   }) {
     return _api.post(
       '/sales',
       data: {
+        if (discount > 0) 'discount': discount,
+        if (discount > 0) 'discount_note': discountNote,
         'payment_method': paymentMethod,
         'store_id': ?storeId,
         if (customerId != null) 'customer_id': customerId,
@@ -85,9 +89,10 @@ class SaleRecordLine {
   factory SaleRecordLine.fromJson(Map<String, dynamic> json) {
     final item = json['item'] as Map<String, dynamic>?;
     return SaleRecordLine(
-      name: json['item_type'] == 'plate'
-          ? 'Plate'
-          : item?['name'] as String? ?? 'Item',
+      // A lunch dish is a plate with a name (Beef); the plain plate has none.
+      name:
+          item?['name'] as String? ??
+          (json['item_type'] == 'plate' ? 'Plate' : 'Item'),
       qty: double.parse(json['qty'].toString()),
       unitPrice: double.parse(json['unit_price'].toString()),
       lineTotal: double.parse(json['line_total'].toString()),
@@ -114,6 +119,9 @@ class SaleRecord {
     this.voidedAt,
     this.voidedByName,
     this.voidReason,
+    this.soldById,
+    this.discount = 0,
+    this.discountNote,
   });
 
   factory SaleRecord.fromJson(Map<String, dynamic> json) => SaleRecord(
@@ -122,7 +130,8 @@ class SaleRecord {
     storeName:
         (json['store'] as Map<String, dynamic>?)?['name'] as String? ?? '',
     soldByName:
-        (json['sold_by'] as Map<String, dynamic>?)?['name'] as String? ?? '',
+        (json['sold_by'] is Map ? json['sold_by']['name'] as String? : null) ??
+        '',
     customerName:
         (json['customer'] as Map<String, dynamic>?)?['name'] as String?,
     paymentMethod: json['payment_method'] as String,
@@ -134,9 +143,15 @@ class SaleRecord {
     voidedAt: json['voided_at'] == null
         ? null
         : DateTime.parse(json['voided_at'] as String),
-    voidedByName:
-        (json['voided_by'] as Map<String, dynamic>?)?['name'] as String?,
+    voidedByName: (json['voided_by'] is Map
+        ? json['voided_by']['name'] as String?
+        : null),
     voidReason: json['void_reason'] as String?,
+    soldById: json['sold_by'] is Map
+        ? (json['sold_by'] as Map)['id'] as int?
+        : json['sold_by'] as int?,
+    discount: double.tryParse('${json['discount'] ?? 0}') ?? 0,
+    discountNote: json['discount_note'] as String?,
   );
 
   final int id;
@@ -151,6 +166,10 @@ class SaleRecord {
   final DateTime? voidedAt;
   final String? voidedByName;
   final String? voidReason;
+
+  final int? soldById;
+  final double discount;
+  final String? discountNote;
 
   bool get isVoided => voidedAt != null;
 

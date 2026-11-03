@@ -203,6 +203,25 @@ class _BranchDetailScreenState extends ConsumerState<BranchDetailScreen> {
                     '${qty(totals.itemsSold)} · ${compactUgx(totals.itemRevenue)}',
               ),
             ],
+            if (totals.discounts > 0 || data.expensesTotal > 0) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: StatTile(
+                      label: 'Discounts given',
+                      value: compactUgx(totals.discounts),
+                    ),
+                  ),
+                  Expanded(
+                    child: StatTile(
+                      label: 'Expenses paid',
+                      value: compactUgx(data.expensesTotal),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -284,6 +303,28 @@ class _BranchDetailScreenState extends ConsumerState<BranchDetailScreen> {
               ),
       ),
       gap,
+      if (data.expenses.isNotEmpty) ...[
+        SectionCard(
+          title: 'Expenses paid from takings',
+          trailing: Text(
+            CurrencyFormatter.format(data.expensesTotal),
+            style: TextStyle(fontSize: 12, color: muted),
+          ),
+          child: Column(
+            children: [
+              for (final e in data.expenses)
+                _LineRow(
+                  leading: '',
+                  title: e.category == null
+                      ? e.name
+                      : '${e.name} · ${e.category}',
+                  trailing: CurrencyFormatter.format(e.revenue),
+                ),
+            ],
+          ),
+        ),
+        gap,
+      ],
       SectionCard(
         title: 'Stock',
         trailing: Text(

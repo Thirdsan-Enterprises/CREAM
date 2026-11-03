@@ -106,7 +106,7 @@ class MenuTest extends TestCase
         $this->stock($egg, 30);
         $this->sell([['item_type' => 'item', 'item_id' => $egg, 'qty' => 4]])->assertCreated();
 
-        $row = collect($this->actingAs($this->cashier)->getJson('/api/stock/status')->json('items'))->firstWhere('item_name', 'Egg');
+        $row = collect($this->actingAs($this->owner)->getJson('/api/stock/status?store_id='.$this->town->id)->json('items'))->firstWhere('item_name', 'Egg');
         $this->assertEquals(26, $row['balance']);
     }
 

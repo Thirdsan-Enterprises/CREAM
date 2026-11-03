@@ -6,6 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../core/api/repositories/branch_reports_repository.dart';
+import '../../core/api/repositories/operations_repository.dart';
 import '../models/stock_transfer.dart';
 
 /// Text is kept to plain Latin characters: the built-in PDF font has no
@@ -520,6 +521,309 @@ Future<Uint8List> branchReportPdf(
           ),
         ),
       ],
+    ),
+  );
+  return doc.save();
+}
+
+/// A cashier's day (or a branch's day): every item and drink sold, how it
+/// was paid, discounts, cancelled sales, expenses and the cash to hand over.
+Future<Uint8List> dayReportPdf(
+  DayReport day, {
+  required String printedBy,
+}) async {
+  final logo = await _logo();
+  final who = day.branchWide ? day.storeName : day.personName;
+  final doc = pw.Document(
+    title: '$who, ${_date.format(day.date)}',
+    author: 'Cream Restaurant & Catering Services',
+  );
+  const payLabels = {
+    'cash': 'Cash',
+    'momo': 'MoMo',
+    'airtel': 'Airtel',
+    'account': 'Account',
+    'lpo': 'LPO',
+  };
+
+  doc.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: pw.EdgeInsets.zero,
+      header: (_) => _header(
+        logo,
+        day.branchWide ? 'Branch day' : 'My day',
+        '$who · ${_date.format(day.date)}',
+      ),
+      footer: (context) => _footer(context, printedBy),
+      build: (context) => [
+        pw.Padding(
+          padding: const pw.EdgeInsets.fromLTRB(28, 18, 28, 0),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              if (!day.branchWide)
+                pw.Text(
+                  '${day.personName} at ${day.storeName}',
+                  style: const pw.TextStyle(color: _muted),
+                ),
+              pw.Text(
+                ugx(day.total),
+                style: pw.TextStyle(
+                  fontSize: 26,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _charcoal,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Row(
+                children: [
+                  _fact('Sales', '${day.salesCount}'),
+                  _fact('Plates', _qty(day.plates)),
+                  _fact('Discounts', ugx(day.discounts)),
+                  _fact('Expenses', ugx(day.expensesTotal)),
+                ],
+              ),
+              pw.SizedBox(height: 12),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  color: _cream,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Row(
+                  children: [
+                    _fact('Cash sales', ugx(day.cashSales)),
+                    _fact('Cash expenses', ugx(day.cashExpenses)),
+                    _fact('Cash to hand over', ugx(day.cashToHandOver)),
+                  ],
+                ),
+              ),
+              _label('What was sold'),
+              day.items.isEmpty
+                  ? pw.Text('Nothing sold.')
+                  : _table(
+                      ['Item', 'Heading', 'Qty', 'Amount'],
+                      [
+                        for (final l in day.items)
+                          [l.name, l.category, _qty(l.qty), ugx(l.revenue)],
+                      ],
+                      align: const {
+                        2: pw.Alignment.centerRight,
+                        3: pw.Alignment.centerRight,
+                      },
+                    ),
+              _label('How it was paid'),
+              _table(
+                ['Method', 'Amount'],
+                [
+                  for (final e in day.byPayment.entries)
+                    [payLabels[e.key] ?? e.key, ugx(e.value)],
+                ],
+                align: const {1: pw.Alignment.centerRight},
+              ),
+              if (day.discountedSales.isNotEmpty) ...[
+                _label('Discounts given'),
+                _table(
+                  ['Reason', 'Amount'],
+                  [
+                    for (final d in day.discountedSales) [d.$2, ugx(d.$1)],
+                  ],
+                  align: const {1: pw.Alignment.centerRight},
+                ),
+              ],
+              if (day.expenses.isNotEmpty) ...[
+                _label('Expenses paid from takings'),
+                _table(
+                  ['What for', 'Heading', 'Paid from', 'Amount'],
+                  [
+                    for (final e in day.expenses)
+                      [
+                        e.note ?? '',
+                        e.category,
+                        payLabels[e.paidFrom] ?? e.paidFrom,
+                        ugx(e.amount),
+                      ],
+                  ],
+                  align: const {3: pw.Alignment.centerRight},
+                ),
+              ],
+              if (day.cancelledSales.isNotEmpty) ...[
+                _label('Cancelled sales (not counted)'),
+                _table(
+                  ['Reason', 'Amount'],
+                  [
+                    for (final c in day.cancelledSales) [c.$2, ugx(c.$1)],
+                  ],
+                  align: const {1: pw.Alignment.centerRight},
+                ),
+              ],
+              pw.SizedBox(height: 30),
+              pw.Row(
+                children: [
+                  _signature(
+                    day.branchWide ? 'Store manager' : 'Cashier',
+                    day.branchWide ? null : day.personName,
+                  ),
+                  pw.SizedBox(width: 40),
+                  _signature('Received by', null),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+  return doc.save();
+}
+
+/// A customer receipt on an 80 mm roll, the width of common receipt
+/// printers; it also reads well on a phone when sent on WhatsApp. Not a
+/// URA EFRIS fiscal receipt.
+Future<Uint8List> receiptPdf(Receipt r, {double? cashReceived}) async {
+  final logo = await _logo();
+  final doc = pw.Document(
+    title: 'Receipt #${r.number}',
+    author: 'Cream Restaurant & Catering Services',
+  );
+  const payLabels = {
+    'cash': 'Cash',
+    'momo': 'MTN MoMo',
+    'airtel': 'Airtel Money',
+    'account': 'Customer account',
+    'lpo': 'LPO',
+  };
+  const small = pw.TextStyle(fontSize: 7.5, color: _muted);
+  const body = pw.TextStyle(fontSize: 8.5);
+  final bold = pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold);
+  pw.Widget dashed() => pw.Padding(
+    padding: const pw.EdgeInsets.symmetric(vertical: 5),
+    child: pw.Container(
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(
+          bottom: pw.BorderSide(
+            color: _muted,
+            width: 0.5,
+            style: pw.BorderStyle.dashed,
+          ),
+        ),
+      ),
+    ),
+  );
+  pw.Widget pair(String a, String b, {pw.TextStyle? style}) => pw.Padding(
+    padding: const pw.EdgeInsets.symmetric(vertical: 1),
+    child: pw.Row(
+      children: [
+        pw.Expanded(child: pw.Text(a, style: style ?? body)),
+        pw.Text(b, style: style ?? body),
+      ],
+    ),
+  );
+
+  doc.addPage(
+    pw.Page(
+      pageFormat: PdfPageFormat.roll80,
+      margin: const pw.EdgeInsets.fromLTRB(10, 12, 10, 14),
+      build: (context) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          if (logo != null)
+            pw.Center(
+              child: pw.Container(width: 34, height: 34, child: pw.Image(logo)),
+            ),
+          pw.SizedBox(height: 4),
+          pw.Text(
+            'CREAM RESTAURANT & CATERING',
+            textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.Text(
+            'we serve beyond your desire',
+            textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(fontSize: 7, fontStyle: pw.FontStyle.italic),
+          ),
+          pw.Text(r.storeName, textAlign: pw.TextAlign.center, style: bold),
+          if (r.storeAddress != null && r.storeAddress!.isNotEmpty)
+            pw.Text(
+              r.storeAddress!,
+              textAlign: pw.TextAlign.center,
+              style: small,
+            ),
+          if (r.storePhone != null && r.storePhone!.isNotEmpty)
+            pw.Text(
+              'Tel ${r.storePhone}',
+              textAlign: pw.TextAlign.center,
+              style: small,
+            ),
+          dashed(),
+          pair(
+            'Receipt #${r.number}',
+            _dateTime.format(r.soldAt.toLocal()),
+            style: small,
+          ),
+          if (r.cashier != null) pair('Served by', r.cashier!, style: small),
+          if (r.voided)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 4),
+              child: pw.Text(
+                'CANCELLED',
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(
+                  fontSize: 11,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _red,
+                ),
+              ),
+            ),
+          dashed(),
+          for (final (name, qty, price, total) in r.lines) ...[
+            pw.Text(name, style: bold),
+            pair(
+              '  ${_qty(qty)} x ${_money.format(price)}',
+              _money.format(total),
+            ),
+          ],
+          dashed(),
+          if (r.discount > 0) ...[
+            pair('Subtotal', _money.format(r.subtotal)),
+            pair(
+              'Discount${r.discountNote == null ? '' : ' (${r.discountNote})'}',
+              '-${_money.format(r.discount)}',
+            ),
+          ],
+          pair(
+            'TOTAL',
+            ugx(r.total),
+            style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+          ),
+          pair('Paid by', payLabels[r.paymentMethod] ?? r.paymentMethod),
+          if (cashReceived != null && cashReceived >= r.total) ...[
+            pair('Cash received', _money.format(cashReceived)),
+            pair('Change', _money.format(cashReceived - r.total), style: bold),
+          ],
+          if (r.customerName != null) ...[
+            pair('Account', r.customerName!),
+            if (r.customerBalance != null)
+              pair(
+                r.customerBalance! < 0 ? 'Balance owed' : 'Balance left',
+                ugx(r.customerBalance!.abs()),
+              ),
+          ],
+          dashed(),
+          pw.Text(
+            'Thank you for dining with us!',
+            textAlign: pw.TextAlign.center,
+            style: bold,
+          ),
+          pw.SizedBox(height: 3),
+          pw.Text(
+            'Customer receipt. Not a URA EFRIS fiscal receipt.',
+            textAlign: pw.TextAlign.center,
+            style: small,
+          ),
+        ],
+      ),
     ),
   );
   return doc.save();

@@ -50,7 +50,7 @@ class TransferTile extends ConsumerWidget {
     final lines = transfer.items.length;
     return Card(
       child: ListTile(
-        title: Text('${transfer.fromStoreName} → ${transfer.toStoreName}'),
+        title: Text('${transfer.fromStoreName} to ${transfer.toStoreName}'),
         subtitle: Text(
           [
             '#${transfer.id} · ${DateFormatter.dateTime(transfer.dispatchedAt)}',
@@ -100,7 +100,9 @@ class _TransfersListTabState extends ConsumerState<TransfersListTab> {
   @override
   Widget build(BuildContext context) {
     ref.listen(selectedStoreIdProvider, (_, _) {
-      setState(() => _future = _load());
+      setState(() {
+        _future = _load();
+      });
     });
     return FutureBuilder<List<StockTransfer>>(
       future: _future,
@@ -108,7 +110,9 @@ class _TransfersListTabState extends ConsumerState<TransfersListTab> {
         if (snapshot.hasError) {
           return Center(
             child: FilledButton(
-              onPressed: () => setState(() => _future = _load()),
+              onPressed: () => setState(() {
+                _future = _load();
+              }),
               child: const Text('Retry'),
             ),
           );
@@ -118,7 +122,9 @@ class _TransfersListTabState extends ConsumerState<TransfersListTab> {
         }
         final transfers = snapshot.data!;
         return RefreshIndicator(
-          onRefresh: () async => setState(() => _future = _load()),
+          onRefresh: () async => setState(() {
+            _future = _load();
+          }),
           child: ListView(
             padding: const EdgeInsets.all(12),
             children: [

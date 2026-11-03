@@ -22,8 +22,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     _future = ref.read(reportsRepositoryProvider).dashboard();
   }
 
-  void _reload() =>
-      setState(() => _future = ref.read(reportsRepositoryProvider).dashboard());
+  void _reload() => setState(() {
+    _future = ref.read(reportsRepositoryProvider).dashboard();
+  });
 
   @override
   Widget build(BuildContext context) {
