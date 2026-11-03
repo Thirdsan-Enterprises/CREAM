@@ -29,6 +29,9 @@ use Illuminate\Support\Facades\Route;
 Route::post('/auth/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {
+    // Today's plates: every role (procurement sets lunch for each branch).
+    Route::get('/daily-plates', [DailyPlatesController::class, 'index']);
+    Route::post('/daily-plates', [DailyPlatesController::class, 'store']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me', [AuthController::class, 'me']);
 
@@ -78,8 +81,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/expenses', [ExpenseController::class, 'store']);
         Route::post('/expenses/{expense}/void', [ExpenseController::class, 'void']);
         Route::get('/reports/my-day', [DayReportController::class, 'show']);
-        Route::get('/daily-plates', [DailyPlatesController::class, 'index']);
-        Route::post('/daily-plates', [DailyPlatesController::class, 'store']);
         // Cashiers: only their own sale, within minutes (checked in the controller).
         Route::post('/sales/{sale}/void', [SaleController::class, 'void']);
 

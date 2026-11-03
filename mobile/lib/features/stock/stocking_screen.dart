@@ -10,6 +10,7 @@ import '../../core/auth/store.dart';
 import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/formatters/date_formatter.dart';
 import '../../shared/models/item.dart';
+import '../sales/todays_plates.dart';
 import 'kitchen_items.dart';
 import 'purchases_ledger.dart';
 import 'stock_requests.dart';
@@ -209,7 +210,7 @@ class StockingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 8,
+      length: 9,
       child: Column(
         children: [
           Material(
@@ -218,6 +219,7 @@ class StockingScreen extends StatelessWidget {
               isScrollable: true,
               tabAlignment: TabAlignment.start,
               tabs: [
+                Tab(text: "Today's plates"),
                 Tab(text: 'Requests'),
                 Tab(text: 'Purchase'),
                 Tab(text: 'Purchases ledger'),
@@ -232,6 +234,7 @@ class StockingScreen extends StatelessWidget {
           const Expanded(
             child: TabBarView(
               children: [
+                _PlatesTab(),
                 ProcurementRequestsTab(),
                 _PurchaseTab(),
                 PurchasesLedgerTab(),
@@ -245,6 +248,82 @@ class StockingScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Each morning procurement (or the owner) sets how many lunch plates each
+/// branch has today; branches sell them down from there.
+class _PlatesTab extends ConsumerStatefulWidget {
+  const _PlatesTab();
+
+  @override
+  ConsumerState<_PlatesTab> createState() => _PlatesTabState();
+}
+
+class _PlatesTabState extends ConsumerState<_PlatesTab> {
+  List<Store>? _stores;
+  Store? _store;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final stores = (await ref.read(storesRepositoryProvider).all())
+          .where((s) => s.isActive)
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _stores = stores;
+        _store =
+            stores.where((s) => !s.isMain).firstOrNull ?? stores.firstOrNull;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => _error = e is ApiException ? e.message : 'Could not load.',
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) return Center(child: Text(_error!));
+    final stores = _stores;
+    if (stores == null) return const Center(child: CircularProgressIndicator());
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final store in stores)
+                ChoiceChip(
+                  label: Text(store.name),
+                  selected: store.id == _store?.id,
+                  onSelected: (_) => setState(() => _store = store),
+                ),
+            ],
+          ),
+        ),
+        if (_store != null)
+          Expanded(
+            child: TodaysPlatesPanel(
+              key: ValueKey(_store!.id),
+              storeId: _store!.id,
+              inSheet: false,
+            ),
+          ),
+      ],
     );
   }
 }

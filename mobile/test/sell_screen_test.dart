@@ -111,6 +111,8 @@ Finder _dialogField(int i) => find
     .at(i);
 
 Future<void> _heading(WidgetTester tester, String name) async {
+  await tester.ensureVisible(find.widgetWithText(ChoiceChip, name));
+  await tester.pumpAndSettle();
   await tester.tap(find.widgetWithText(ChoiceChip, name));
   await tester.pumpAndSettle();
 }
@@ -155,6 +157,35 @@ void main() {
       ('item', 3, 1.0),
     ]);
     expect(find.text('Tap items to start an order'), findsOneWidget);
+  });
+
+  testWidgets('takeaway adds a silver plate per lunch plate, not a tile', (
+    tester,
+  ) async {
+    final sales = await _pump(tester, [
+      ..._townMenu,
+      _entry(9, 'Silver plate', 'Packing', 500),
+    ]);
+    expect(find.widgetWithText(ChoiceChip, 'Packing'), findsNothing);
+    await _heading(tester, 'Lunch');
+    expect(find.text('Silver plate'), findsNothing);
+    await tester.tap(find.text('Beef'));
+    await tester.tap(find.text('Beef'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Order (2)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(find.text('2 × UGX 500 = UGX 1,000'), findsOneWidget);
+    expect(find.text('UGX 21,000'), findsWidgets);
+
+    await tester.tap(find.text('Complete sale'));
+    await tester.pumpAndSettle();
+    expect(sales.sent!.map((l) => (l.itemId, l.qty)).toList(), [
+      (1, 2.0),
+      (9, 2.0),
+    ]);
   });
 
   testWidgets('search finds an item under any heading', (tester) async {

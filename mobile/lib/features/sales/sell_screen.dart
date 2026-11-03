@@ -12,6 +12,7 @@ import '../../shared/models/customer.dart';
 import '../../shared/models/item.dart';
 import '../../shared/models/sale.dart';
 import '../customers/customers_view.dart';
+import 'menu_look.dart';
 import 'pos_cart.dart';
 import 'sale_complete.dart';
 import 'todays_plates.dart';
@@ -95,7 +96,15 @@ class _SellScreenState extends ConsumerState<SellScreen> {
     ]);
     final platePrice = results[0] as double;
     final menu = results[1] as List<MenuEntry>;
-    final items = [for (final entry in menu) PosItem.menu(entry)];
+    final all = [for (final entry in menu) PosItem.menu(entry)];
+    // The packing charge is a switch on the order, not a tile.
+    final packing = all.where((i) => i.isPacking).firstOrNull;
+    if (packing?.key != _cart.packing?.key ||
+        packing?.price != _cart.packing?.price) {
+      if (_cart.packing != null) _cart.setPacks(0);
+      _cart.packing = packing;
+    }
+    final items = all.where((i) => !i.isPacking).toList();
     // A branch with no lunch dishes on its menu sells the plain plate.
     if (!items.any((i) => i.category.toLowerCase() == 'lunch')) {
       items.insert(0, PosItem.plate(platePrice));
@@ -448,12 +457,25 @@ class _MenuPane extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(right: 8),
           child: ChoiceChip(
+            avatar: ExcludeSemantics(
+              child: Text(
+                headingEmoji(h),
+                style: const TextStyle(fontSize: 15),
+              ),
+            ),
             label: Text(h),
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            labelPadding: const EdgeInsets.only(left: 2, right: 6),
             selected: !searching && h == heading,
             showCheckmark: false,
-            labelStyle: const TextStyle(
+            selectedColor: AppColors.charcoal,
+            labelStyle: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 15,
+              color: !searching && h == heading
+                  ? Colors.white
+                  : AppColors.charcoal,
             ),
             onSelected: (_) => onHeading(h),
           ),
@@ -485,10 +507,10 @@ class _MenuPane extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 200,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
                 // Fixed height: more dishes on screen at once.
-                mainAxisExtent: 112,
+                mainAxisExtent: 138,
               ),
               itemCount: items.length,
               itemBuilder: (context, index) {
@@ -533,6 +555,13 @@ class _ItemTile extends StatelessWidget {
     final out = left != null && left <= 0;
     final price = CurrencyFormatter.format(item.price);
 
+    final look = lookFor(item.name, item.category);
+    final leftText = left == null
+        ? null
+        : out
+        ? (item.isDaily ? 'None left today' : 'Out of stock')
+        : '${left.toStringAsFixed(0)} left${item.isDaily ? ' today' : ''}';
+
     // The tile itself adds one; the minus sits beside it, not inside, so a
     // screen reader still reads the tile as one "add" button.
     return Stack(
@@ -543,84 +572,139 @@ class _ItemTile extends StatelessWidget {
             label: [
               item.name,
               price,
-              if (left != null)
-                out
-                    ? (item.isDaily ? 'None left today' : 'Out of stock')
-                    : '${left.toStringAsFixed(0)} left${item.isDaily ? ' today' : ''}',
+              ?leftText,
               if (selected) '$qty in order',
             ].join(', '),
             excludeSemantics: true,
-            child: Material(
-              color: selected
-                  ? AppColors.gold.withValues(alpha: 0.16)
-                  : theme.colorScheme.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(
-                  color: selected ? AppColors.gold : const Color(0xFFE6DED0),
-                  width: selected ? 2 : 1,
+            child: Opacity(
+              opacity: out ? 0.55 : 1,
+              child: Material(
+                color: Colors.transparent,
+                elevation: selected ? 4 : 1,
+                shadowColor: look.accent.withValues(alpha: 0.35),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(
+                    color: selected
+                        ? look.accent
+                        : look.accent.withValues(alpha: 0.18),
+                    width: selected ? 3 : 1,
+                  ),
                 ),
-              ),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: onAdd,
-                onLongPress: onTypeQty,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.only(right: selected ? 30 : 0),
-                          child: Text(
-                            item.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              height: 1.15,
-                              color: out
-                                  ? AppColors.charcoal.withValues(alpha: 0.45)
-                                  : AppColors.charcoal,
+                clipBehavior: Clip.antiAlias,
+                child: Ink(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [look.top, look.bottom],
+                    ),
+                  ),
+                  child: InkWell(
+                    onTap: onAdd,
+                    onLongPress: onTypeQty,
+                    child: Stack(
+                      children: [
+                        // A large faint emoji in the corner, for colour.
+                        Positioned(
+                          right: -10,
+                          bottom: -14,
+                          child: ExcludeSemantics(
+                            child: Opacity(
+                              opacity: 0.22,
+                              child: Text(
+                                emojiFor(item.name, item.category),
+                                style: const TextStyle(fontSize: 64),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      Padding(
-                        // Room for the minus button once it is in the order.
-                        padding: EdgeInsets.only(right: selected ? 34 : 0),
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            price,
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.charcoal,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  emojiFor(item.name, item.category),
+                                  style: const TextStyle(fontSize: 22),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Expanded(
+                                child: Padding(
+                                  padding: EdgeInsets.only(
+                                    right: selected ? 28 : 0,
+                                  ),
+                                  child: Text(
+                                    item.name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      height: 1.1,
+                                      color: AppColors.charcoal,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        price,
+                                        style: theme.textTheme.titleMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w900,
+                                              color: AppColors.charcoal,
+                                              fontFeatures: const [
+                                                FontFeature.tabularFigures(),
+                                              ],
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                  // Room for the minus once it is in the order.
+                                  if (selected) const SizedBox(width: 34),
+                                ],
+                              ),
+                              if (leftText != null)
+                                Container(
+                                  margin: const EdgeInsets.only(top: 3),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: out
+                                        ? AppColors.danger
+                                        : Colors.white.withValues(alpha: 0.75),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    leftText,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: out ? Colors.white : look.accent,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
-                      ),
-                      if (left != null)
-                        Text(
-                          out
-                              ? (item.isDaily
-                                    ? 'None left today'
-                                    : 'Out of stock')
-                              : '${left.toStringAsFixed(0)} left${item.isDaily ? ' today' : ''}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: out ? FontWeight.w800 : FontWeight.w500,
-                            color: out
-                                ? AppColors.danger
-                                : AppColors.charcoal.withValues(alpha: 0.6),
-                          ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -634,12 +718,12 @@ class _ItemTile extends StatelessWidget {
             child: ExcludeSemantics(
               child: CircleAvatar(
                 radius: 15,
-                backgroundColor: AppColors.gold,
+                backgroundColor: look.accent,
                 child: Text(
                   '$qty',
                   style: const TextStyle(
-                    color: AppColors.charcoal,
-                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
@@ -651,8 +735,8 @@ class _ItemTile extends StatelessWidget {
             child: IconButton(
               tooltip: 'One fewer ${item.name}',
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.remove_circle_outline),
-              color: AppColors.charcoal,
+              icon: const Icon(Icons.remove_circle),
+              color: look.accent,
               onPressed: onRemove,
             ),
           ),
@@ -779,8 +863,10 @@ class OrderPanel extends StatelessWidget {
                       padding: EdgeInsets.symmetric(vertical: 24),
                       child: Text('Tap items on the menu to add them.'),
                     ),
-                  for (final line in cart.lines)
+                  for (final line in cart.foodLines)
                     _OrderLine(line: line, cart: cart),
+                  if (!cart.isEmpty && cart.packing != null)
+                    _TakeawayBox(cart: cart),
                   if (!cart.isEmpty) ...[
                     const SizedBox(height: 4),
                     if (cart.discount > 0)
@@ -897,6 +983,89 @@ class OrderPanel extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Takeaway: the silver plates the food is packed in, charged per pack.
+class _TakeawayBox extends StatelessWidget {
+  const _TakeawayBox({required this.cart});
+
+  final PosCart cart;
+
+  @override
+  Widget build(BuildContext context) {
+    final packing = cart.packing!;
+    final on = cart.takeaway;
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+      decoration: BoxDecoration(
+        color: on ? const Color(0xFFE6F4EA) : const Color(0xFFF4EFE6),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: on ? AppColors.success : const Color(0xFFE6DED0),
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Text('🥡', style: TextStyle(fontSize: 26)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Takeaway',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      'Packing ${CurrencyFormatter.format(packing.price)} per ${packing.name.toLowerCase()}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(value: on, onChanged: cart.setTakeaway),
+            ],
+          ),
+          if (on)
+            Row(
+              children: [
+                const SizedBox(width: 36),
+                Expanded(
+                  child: Text(
+                    '${cart.packs} × ${CurrencyFormatter.format(packing.price)} = '
+                    '${CurrencyFormatter.format(cart.packs * packing.price)}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'One pack fewer',
+                  icon: const Icon(Icons.remove_circle_outline),
+                  onPressed: () => cart.setPacks(cart.packs - 1),
+                ),
+                Text(
+                  '${cart.packs}',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'One pack more',
+                  icon: const Icon(Icons.add_circle_outline),
+                  onPressed: () => cart.setPacks(cart.packs + 1),
+                ),
+              ],
+            ),
+        ],
+      ),
     );
   }
 }

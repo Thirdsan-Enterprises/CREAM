@@ -37,10 +37,20 @@ class LoadMenu extends Command
         ['Beans', 10000, 'Small plate'],
     ];
 
-    /** Charged on top when food is packed to take away, at every branch. */
+    /**
+     * Packing: the silver (aluminium) plate food is packed in to take away.
+     * Not a tile on the Sell screen: the cashier ticks "Takeaway" and its
+     * price is added for each pack. At every branch.
+     */
     public const EVERY_BRANCH = [
-        ['Takeaway', 'Silver plate', 500],
+        ['Packing', 'Silver plate', 500],
     ];
+
+    /** Breakfast is Town's own; the other branches sell lunch and drinks. */
+    public const BREAKFAST_BRANCH = 'TOWN';
+
+    /** Breakfast made to order, so not counted each morning. */
+    public const MADE_TO_ORDER = ['Milk Tea', 'Black Tea', 'Rolex', 'Omelette'];
 
     /** [heading, name, unit, price, counted on a shelf] */
     public const MENU = [
@@ -72,7 +82,7 @@ class LoadMenu extends Command
         ['Breakfast', 'Sausage', 'piece', 1500, false],
         ['Breakfast', 'Omelette', 'plate', 3000, false],
         ['Breakfast', 'Pancake', 'piece', 500, false],
-        ['Takeaway', 'Silver plate', 'piece', 500, false],
+        ['Packing', 'Silver plate', 'piece', 500, false],
 
         ['Drinks', 'Minute Maid', 'bottle', 3000, true],
         ['Drinks', 'Water', 'bottle', 1500, true],
@@ -92,6 +102,13 @@ class LoadMenu extends Command
 
         DB::transaction(function () use ($branches, $others) {
             foreach (self::MENU as [$heading, $name, $unit, $price, $counted]) {
+                // Counted each morning: lunch plates, and breakfast that is
+                // made ahead (chapatis, mandazi...).
+                $daily = $heading === 'Lunch'
+                    || ($heading === 'Breakfast' && ! in_array($name, self::MADE_TO_ORDER, true));
+                $rowBranches = $heading === 'Breakfast'
+                    ? $branches->filter(fn (Store $b) => strtoupper($b->code) === self::BREAKFAST_BRANCH)
+                    : $branches;
                 // Reuse a menu item (or drink) of the same name, never a
                 // kitchen stock item: "Cassava" on the breakfast menu is a
                 // dish, not the kilos of cassava procurement buys.
@@ -105,9 +122,9 @@ class LoadMenu extends Command
                         'unit' => $unit,
                         'is_active' => true,
                         'is_drink' => $heading === 'Drinks',
-                        // Lunch is plates counted per day (Today's plates).
-                        'tracks_stock' => $counted || $heading === 'Lunch',
-                        'daily_stock' => $heading === 'Lunch',
+                        // Counted per day (Today's plates).
+                        'tracks_stock' => $counted || $daily,
+                        'daily_stock' => $daily,
                     ]);
                 $isNew = $item->wasRecentlyCreated;
                 $item->update([
@@ -122,9 +139,12 @@ class LoadMenu extends Command
                 if ($isNew && $heading !== 'Drinks') {
                     ItemStoreSetting::where('item_id', $item->id)->whereIn('store_id', $others->pluck('id'))->update(['on_menu' => false]);
                 }
-                ItemStoreSetting::where('item_id', $item->id)->whereIn('store_id', $branches->pluck('id'))->update(['on_menu' => true]);
+                if ($heading === 'Breakfast') {
+                    ItemStoreSetting::where('item_id', $item->id)->whereNotIn('store_id', $rowBranches->pluck('id'))->update(['on_menu' => false]);
+                }
+                ItemStoreSetting::where('item_id', $item->id)->whereIn('store_id', $rowBranches->pluck('id'))->update(['on_menu' => true]);
 
-                foreach ($branches as $branch) {
+                foreach ($rowBranches as $branch) {
                     $branchPrice = strtoupper($branch->code) === 'KIRA' && $heading === 'Lunch'
                         ? self::KIRA_LUNCH_PRICE
                         : $price;
@@ -212,7 +232,7 @@ class LoadMenu extends Command
         }
     }
 
-    /** Things like the takeaway silver plate, sold at every branch. */
+    /** The takeaway packing charge, at every branch. */
     private function loadEveryBranch(): void
     {
         foreach (self::EVERY_BRANCH as [$heading, $name, $price]) {

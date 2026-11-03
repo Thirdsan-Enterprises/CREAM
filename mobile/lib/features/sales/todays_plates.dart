@@ -15,21 +15,26 @@ Future<bool> showTodaysPlates(BuildContext context, {int? storeId}) async {
     isScrollControlled: true,
     useSafeArea: true,
     showDragHandle: true,
-    builder: (_) => _TodaysPlatesSheet(storeId: storeId),
+    builder: (_) => TodaysPlatesPanel(storeId: storeId),
   );
   return saved ?? false;
 }
 
-class _TodaysPlatesSheet extends ConsumerStatefulWidget {
-  const _TodaysPlatesSheet({this.storeId});
+/// The plate counts for one branch. In a sheet (the Sell screen's Plates
+/// button) it closes on save; on the Stocking screen ([inSheet] false) it
+/// stays open and shows the new counts. Lunch is set by procurement and the
+/// owner, so a branch sees its lunch counts without a field to change them.
+class TodaysPlatesPanel extends ConsumerStatefulWidget {
+  const TodaysPlatesPanel({super.key, this.storeId, this.inSheet = true});
 
   final int? storeId;
+  final bool inSheet;
 
   @override
-  ConsumerState<_TodaysPlatesSheet> createState() => _TodaysPlatesSheetState();
+  ConsumerState<TodaysPlatesPanel> createState() => _TodaysPlatesPanelState();
 }
 
-class _TodaysPlatesSheetState extends ConsumerState<_TodaysPlatesSheet> {
+class _TodaysPlatesPanelState extends ConsumerState<TodaysPlatesPanel> {
   List<DailyDish>? _dishes;
   String? _error;
   bool _saving = false;
@@ -54,7 +59,7 @@ class _TodaysPlatesSheetState extends ConsumerState<_TodaysPlatesSheet> {
       final dishes = await ref
           .read(operationsRepositoryProvider)
           .dailyPlates(storeId: widget.storeId);
-      if (mounted) setState(() => _dishes = dishes);
+      if (mounted) setState(() => _dishes = _editableFirst(dishes));
     } catch (e) {
       if (mounted) {
         setState(
@@ -71,19 +76,30 @@ class _TodaysPlatesSheetState extends ConsumerState<_TodaysPlatesSheet> {
       if (n != null && n != 0) plates[id] = n;
     });
     if (plates.isEmpty) {
-      Navigator.pop(context, false);
+      if (widget.inSheet) Navigator.pop(context, false);
       return;
     }
     setState(() => _saving = true);
     try {
-      await ref
+      final dishes = await ref
           .read(operationsRepositoryProvider)
           .addPlates(plates, storeId: widget.storeId);
       if (!mounted) return;
-      Navigator.pop(context, true);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Today's plates saved.")));
+      if (widget.inSheet) {
+        Navigator.pop(context, true);
+      } else {
+        for (final c in _add.values) {
+          c.clear();
+        }
+        FocusScope.of(context).unfocus();
+        setState(() {
+          _dishes = _editableFirst(dishes);
+          _saving = false;
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -116,7 +132,11 @@ class _TodaysPlatesSheetState extends ConsumerState<_TodaysPlatesSheet> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
             child: Text(
-              'Type how many plates the kitchen made. Each sale takes one off.',
+              dishes != null && dishes.any((d) => !d.canSet)
+                  ? 'Type how many were made today. Lunch plates are set by '
+                        'procurement. Each sale takes one off.'
+                  : 'Type how many were made today. Each sale takes one off; '
+                        'tomorrow starts again from nothing.',
               style: theme.textTheme.bodySmall,
             ),
           ),
@@ -172,31 +192,41 @@ class _TodaysPlatesSheetState extends ConsumerState<_TodaysPlatesSheet> {
                               ],
                             ),
                           ),
-                          SizedBox(
-                            width: 96,
-                            child: TextField(
-                              controller: _add.putIfAbsent(
-                                dish.itemId,
-                                TextEditingController.new,
+                          if (!dish.canSet)
+                            const SizedBox(
+                              width: 96,
+                              child: Text(
+                                'Set by procurement',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 12),
                               ),
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    signed: true,
-                                  ),
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(
-                                  RegExp(r'^-?\d*'),
+                            )
+                          else
+                            SizedBox(
+                              width: 96,
+                              child: TextField(
+                                controller: _add.putIfAbsent(
+                                  dish.itemId,
+                                  TextEditingController.new,
                                 ),
-                              ],
-                              textAlign: TextAlign.center,
-                              style: theme.textTheme.titleLarge,
-                              decoration: InputDecoration(
-                                labelText: 'Add',
-                                hintText: '0',
-                                semanticCounterText: 'Plates of ${dish.name}',
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      signed: true,
+                                    ),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'^-?\d*'),
+                                  ),
+                                ],
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.titleLarge,
+                                decoration: InputDecoration(
+                                  labelText: 'Add',
+                                  hintText: '0',
+                                  semanticCounterText: 'Plates of ${dish.name}',
+                                ),
                               ),
                             ),
-                          ),
                         ],
                       ),
                     ),
@@ -208,7 +238,10 @@ class _TodaysPlatesSheetState extends ConsumerState<_TodaysPlatesSheet> {
             child: SizedBox(
               height: 52,
               child: FilledButton(
-                onPressed: _saving || dishes == null ? null : _save,
+                onPressed:
+                    _saving || dishes == null || !dishes.any((d) => d.canSet)
+                    ? null
+                    : _save,
                 child: const Text('Save plates'),
               ),
             ),
@@ -218,5 +251,12 @@ class _TodaysPlatesSheetState extends ConsumerState<_TodaysPlatesSheet> {
     );
   }
 }
+
+/// What this person counts comes first (a branch's breakfast), then what
+/// procurement set (lunch).
+List<DailyDish> _editableFirst(List<DailyDish> dishes) => [
+  ...dishes.where((d) => d.canSet),
+  ...dishes.where((d) => !d.canSet),
+];
 
 String _n(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v';

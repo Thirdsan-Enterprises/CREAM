@@ -46,6 +46,12 @@ options above; remove or edit them in Settings (users can be switched off there)
 Only run it on the live server once, deliberately, when the client has agreed that
 everything entered so far is trial data.
 
+# Updates after the first load
+
+Deploying runs `migrate`, which brings the menu in line with each update
+(for example, moving the silver plate to Packing and breakfast to Town
+only). There is no command to run by hand unless the release notes say so.
+
 # Loading the Town and Kira menu (once)
 
 The breakfast and lunch menu Cream sent in November 2026 (Beef 10,000, Fish
@@ -65,11 +71,20 @@ php artisan cream:load-menu
   If an earlier load named them *Full plate* / *Small plate*, running the
   command again renames them; once Lugogo has its own lunches the command
   leaves them as the owner set them.
-- **Silver plate** (the aluminium plate food is packed in to take away) is
-  under its own *Takeaway* heading at every branch, UGX 500. Ring it up
-  with the food when a customer asks for packing.
-- Lunch dishes are **counted per day**: each morning the branch taps *Plates*
-  on the Sell screen and types how many of each dish were made.
+- **Silver plate** (the aluminium plate food is packed in) is not a tile on
+  the Sell screen: it is the **Takeaway** switch on the order, one silver
+  plate per lunch plate by default (change the count there). Its price is
+  under the *Packing* heading in Settings > Prices & menu.
+- **Breakfast is Town's only.** Kira and Lugogo sell lunch and drinks.
+- **Counted each morning:**
+  - *Lunch plates* for every branch are set by **procurement or the owner**
+    in Stocking > *Today's plates* (choose the branch, type e.g. 40 Beef).
+    Branch staff see the counts but cannot change them.
+  - *Town's breakfast* (chapatis, mandazi, samosas...) is counted by Town
+    itself: *Plates* on the Sell screen. Tea, Rolex and Omelette are made
+    to order and not counted.
+  - Each sale takes one off; the next day starts from nothing. Made against
+    sold shows what was left over.
 - Water and Soda are set to UGX 1,500 at Town and Kira; other branches keep
   their prices.
 - It is safe to run again: it does not duplicate items and does not overwrite
