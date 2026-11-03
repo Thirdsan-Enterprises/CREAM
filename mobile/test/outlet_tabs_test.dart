@@ -19,16 +19,15 @@ User _user(UserRole role, {bool mainStore = false}) => User(
 );
 
 void main() {
-  test('a cashier sells, checks stock and accounts, and sees their day', () {
+  test('a cashier sells, keeps accounts and sees their day, but no stock', () {
     expect(outletTabLabels(_user(UserRole.cashier)), [
       'Sell',
-      'Stock',
       'Accounts',
       'My Day',
     ]);
   });
 
-  test('a branch manager has the same tabs as a cashier', () {
+  test('a branch manager also looks after the branch stock', () {
     expect(outletTabLabels(_user(UserRole.storeManager)), [
       'Sell',
       'Stock',

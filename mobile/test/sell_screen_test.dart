@@ -1,120 +1,92 @@
 import 'package:cream_pos/core/api/api_client.dart';
 import 'package:cream_pos/core/api/repositories/items_repository.dart';
+import 'package:cream_pos/core/api/repositories/sales_repository.dart';
 import 'package:cream_pos/core/theme/app_theme.dart';
 import 'package:cream_pos/features/sales/sell_screen.dart';
 import 'package:cream_pos/shared/models/item.dart';
+import 'package:cream_pos/shared/models/sale.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+Item _item(int id, String name, {bool drink = false}) => Item(
+  id: id,
+  name: name,
+  unit: 'piece',
+  category: null,
+  isDrink: drink,
+  isActive: true,
+);
+
+MenuEntry _entry(
+  int id,
+  String name,
+  String category,
+  double price, {
+  double? balance,
+  bool tracks = false,
+}) => MenuEntry(
+  item: _item(id, name, drink: category == 'Drinks'),
+  price: price,
+  category: category,
+  tracksStock: tracks,
+  balance: balance,
+);
+
 class _FakeItems extends ItemsRepository {
-  _FakeItems() : super(ApiClient());
+  _FakeItems(this.entries) : super(ApiClient());
+
+  final List<MenuEntry> entries;
 
   @override
   Future<double> platePrice({int? storeId}) async => 25000;
 
   @override
-  Future<List<MenuEntry>> menu({int? storeId}) async => [
-    MenuEntry(
-      item: Item(
-        id: 7,
-        name: 'Soda',
-        unit: 'bottle',
-        category: null,
-        isDrink: true,
-        isActive: true,
-      ),
-      price: 2000,
-    ),
-  ];
+  Future<List<MenuEntry>> menu({int? storeId}) async => entries;
 }
 
-double _contrast(Color a, Color b) {
-  final la = a.computeLuminance();
-  final lb = b.computeLuminance();
-  final lighter = la > lb ? la : lb;
-  final darker = la > lb ? lb : la;
-  return (lighter + 0.05) / (darker + 0.05);
-}
+class _FakeSales extends SalesRepository {
+  _FakeSales() : super(ApiClient());
 
-void main() {
-  sellStockTests();
-  breakfastTests();
-  testWidgets('a drink stays readable once it has been added to the sale', (
-    tester,
-  ) async {
-    // The test font draws every glyph as a wide square, so use a roomy screen.
-    tester.view.physicalSize = const Size(1200, 2000);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-
-    final theme = AppTheme.outletTerminal();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [itemsRepositoryProvider.overrideWithValue(_FakeItems())],
-        child: MaterialApp(
-          theme: theme,
-          home: const Scaffold(body: SellScreen()),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Soda'));
-    await tester.pumpAndSettle();
-
-    // The tile is now filled with the theme's dark container colour...
-    final fill = theme.colorScheme.primaryContainer;
-    // ...so its name and price must be drawn in a colour that stands out
-    // against it (the bug was dark text on a dark tile, which hid both).
-    for (final label in ['Soda', 'UGX 2,000']) {
-      final text = tester.widget<Text>(find.text(label).first);
-      final color = text.style?.color;
-      expect(color, isNotNull, reason: '$label must set its own colour');
-      expect(
-        _contrast(color!, fill),
-        greaterThan(4.5),
-        reason: '$label is unreadable on the selected tile',
-      );
-    }
-    expect(find.text('Total'), findsOneWidget);
-    expect(find.text('UGX 2,000'), findsWidgets, reason: 'a soda alone');
-  });
-}
-
-class _FakeItemsWithStock extends ItemsRepository {
-  _FakeItemsWithStock(this.stock) : super(ApiClient());
-
-  final double stock;
+  List<SaleLine>? sent;
+  String? method;
 
   @override
-  Future<double> platePrice({int? storeId}) async => 25000;
-
-  @override
-  Future<List<MenuEntry>> menu({int? storeId}) async => [
-    MenuEntry(
-      item: Item(
-        id: 7,
-        name: 'Soda',
-        unit: 'bottle',
-        category: null,
-        isDrink: true,
-        isActive: true,
-      ),
-      price: 2000,
-      balance: stock,
-    ),
-  ];
+  Future<Map<String, dynamic>> createSale({
+    required String paymentMethod,
+    int? customerId,
+    int? storeId,
+    required List<SaleLine> lines,
+  }) async {
+    sent = lines;
+    method = paymentMethod;
+    return {'id': 1};
+  }
 }
 
-Future<void> _pumpSell(WidgetTester tester, double stock) async {
-  tester.view.physicalSize = const Size(1200, 2000);
+final _townMenu = [
+  _entry(1, 'Beef', 'Lunch', 10000),
+  _entry(2, 'Fish', 'Lunch', 12000),
+  _entry(3, 'Milk Tea', 'Breakfast', 3000),
+  _entry(4, 'Chapati', 'Breakfast', 1500),
+  _entry(5, 'Soda', 'Drinks', 1500, balance: 1, tracks: true),
+  _entry(6, 'Water', 'Drinks', 1500, balance: 0, tracks: true),
+];
+
+Future<_FakeSales> _pump(
+  WidgetTester tester,
+  List<MenuEntry> menu, {
+  Size size = const Size(420, 900),
+}) async {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
+  final sales = _FakeSales();
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        itemsRepositoryProvider.overrideWithValue(_FakeItemsWithStock(stock)),
+        itemsRepositoryProvider.overrideWithValue(_FakeItems(menu)),
+        salesRepositoryProvider.overrideWithValue(sales),
       ],
       child: MaterialApp(
         theme: AppTheme.outletTerminal(),
@@ -123,112 +95,112 @@ Future<void> _pumpSell(WidgetTester tester, double stock) async {
     ),
   );
   await tester.pumpAndSettle();
+  return sales;
 }
 
-void sellStockTests() {
-  testWidgets('a drink tile says how many are left', (tester) async {
-    await _pumpSell(tester, 3);
-    expect(find.text('3 left'), findsOneWidget);
+Future<void> _heading(WidgetTester tester, String name) async {
+  await tester.tap(find.widgetWithText(ChoiceChip, name));
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  testWidgets('the menu shows under its headings with branch prices', (
+    tester,
+  ) async {
+    await _pump(tester, _townMenu);
+    for (final h in ['Lunch', 'Breakfast', 'Drinks']) {
+      expect(find.widgetWithText(ChoiceChip, h), findsOneWidget);
+    }
+    await _heading(tester, 'Lunch');
+    expect(find.text('Beef'), findsOneWidget);
+    expect(find.text('UGX 10,000'), findsWidgets);
+    expect(find.text('Milk Tea'), findsNothing, reason: 'only this heading');
+    expect(find.text('Plate'), findsNothing, reason: 'lunch dishes replace it');
+  });
+
+  testWidgets('a lunch and breakfast order is rung up as one sale', (
+    tester,
+  ) async {
+    final sales = await _pump(tester, _townMenu);
+    await _heading(tester, 'Lunch');
+    await tester.tap(find.text('Beef'));
+    await tester.tap(find.text('Beef'));
+    await _heading(tester, 'Breakfast');
+    await tester.tap(find.text('Milk Tea'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 Beef · 1 Milk Tea'), findsOneWidget);
+    expect(find.text('UGX 23,000'), findsOneWidget);
+
+    await tester.tap(find.text('Order (3)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Complete sale'));
+    await tester.pumpAndSettle();
+
+    expect(sales.method, 'cash');
+    expect(sales.sent!.map((l) => (l.itemType, l.itemId, l.qty)).toList(), [
+      ('item', 1, 2.0),
+      ('item', 3, 1.0),
+    ]);
+    expect(find.text('Tap items to start an order'), findsOneWidget);
+  });
+
+  testWidgets('search finds an item under any heading', (tester) async {
+    await _pump(tester, _townMenu);
+    await tester.enterText(find.byType(TextField), 'chap');
+    await tester.pumpAndSettle();
+    expect(find.text('Chapati'), findsOneWidget);
+    expect(find.text('Beef'), findsNothing);
   });
 
   testWidgets('a drink cannot be added beyond what is in stock', (
     tester,
   ) async {
-    await _pumpSell(tester, 1);
-
-    await tester.tap(find.byTooltip('One more plate'));
-    await tester.tap(find.text('Soda'));
-    await tester.pumpAndSettle();
-    expect(find.text('UGX 27,000'), findsOneWidget, reason: 'plate + 1 soda');
-
-    await tester.tap(find.text('Soda'));
-    await tester.pumpAndSettle();
-    expect(find.text('Only 1 Soda in stock.'), findsOneWidget);
-    expect(find.text('UGX 27,000'), findsOneWidget, reason: 'still one soda');
-  });
-
-  testWidgets('a drink with none in stock says so and cannot be added', (
-    tester,
-  ) async {
-    await _pumpSell(tester, 0);
+    await _pump(tester, _townMenu);
+    await _heading(tester, 'Drinks');
+    expect(find.text('1 left'), findsOneWidget);
     expect(find.text('Out of stock'), findsOneWidget);
 
     await tester.tap(find.text('Soda'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Soda'));
+    await tester.pumpAndSettle();
+    expect(find.text('Only 1 Soda in stock.'), findsOneWidget);
+    expect(find.text('1 Soda'), findsOneWidget);
+
+    await tester.tap(find.text('Water'));
+    await tester.pumpAndSettle();
     expect(
-      find.text('Soda is out of stock. Record the purchase first.'),
+      find.text('Water is out of stock. Record the purchase first.'),
       findsOneWidget,
     );
-    expect(find.text('Nothing added yet'), findsOneWidget);
   });
-}
 
-class _FakeBreakfastMenu extends ItemsRepository {
-  _FakeBreakfastMenu() : super(ApiClient());
-
-  @override
-  Future<double> platePrice({int? storeId}) async => 15000;
-
-  @override
-  Future<List<MenuEntry>> menu({int? storeId}) async => [
-    MenuEntry(
-      item: Item(
-        id: 21,
-        name: 'Tea',
-        unit: 'cup',
-        category: null,
-        isDrink: false,
-        isActive: true,
-      ),
-      price: 1000,
-      category: 'Breakfast',
-      tracksStock: false,
-    ),
-    MenuEntry(
-      item: Item(
-        id: 22,
-        name: 'Egg',
-        unit: 'piece',
-        category: null,
-        isDrink: false,
-        isActive: true,
-      ),
-      price: 1500,
-      category: 'Breakfast',
-      balance: 30,
-    ),
-  ];
-}
-
-void breakfastTests() {
-  testWidgets('breakfast items sell on their own, without a plate', (
+  testWidgets('a branch without lunch dishes sells the plain plate', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(1200, 2000);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          itemsRepositoryProvider.overrideWithValue(_FakeBreakfastMenu()),
-        ],
-        child: MaterialApp(
-          theme: AppTheme.outletTerminal(),
-          home: const Scaffold(body: SellScreen()),
-        ),
-      ),
-    );
+    final sales = await _pump(tester, [
+      _entry(5, 'Soda', 'Drinks', 2000, balance: 10, tracks: true),
+    ]);
+    await _heading(tester, 'Lunch');
+    expect(find.text('Plate'), findsOneWidget);
+    await tester.tap(find.text('Plate'));
     await tester.pumpAndSettle();
-
-    expect(find.text('Breakfast'), findsOneWidget);
-    expect(find.text('30 left'), findsOneWidget, reason: 'eggs are counted');
-
-    await tester.tap(find.text('Tea'));
-    await tester.tap(find.text('Tea'));
-    await tester.tap(find.text('Egg'));
+    expect(find.text('UGX 25,000'), findsWidgets);
+    await tester.tap(find.text('Order (1)'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Complete sale'));
+    await tester.pumpAndSettle();
+    expect(sales.sent!.single.itemType, 'plate');
+  });
 
-    expect(find.text('2 Tea · 1 Egg'), findsOneWidget);
-    expect(find.text('UGX 3,500'), findsOneWidget);
+  testWidgets('on a tablet the order sits beside the menu', (tester) async {
+    await _pump(tester, _townMenu, size: const Size(1200, 900));
+    expect(find.text('Order'), findsOneWidget);
+    expect(find.text('Tap items on the menu to add them.'), findsOneWidget);
+    await _heading(tester, 'Lunch');
+    await tester.tap(find.text('Fish'));
+    await tester.pumpAndSettle();
+    expect(find.text('UGX 12,000 each'), findsOneWidget);
   });
 }

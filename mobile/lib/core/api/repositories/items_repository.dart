@@ -29,10 +29,13 @@ class ItemsRepository {
     required double price,
     int? storeId,
     required bool tracksStock,
+    List<int>? soldAt,
   }) {
     return _api.post(
       '/menu-items',
       data: {
+        // Null: sold at every branch.
+        'branches': ?soldAt,
         'item_id': ?itemId,
         'name': ?name,
         'unit': ?unit,
@@ -55,11 +58,14 @@ class ItemsRepository {
     bool? tracksStock,
     bool? isActive,
     bool useDefault = false,
+    List<int>? soldAt,
+    bool soldEverywhere = false,
     required String reason,
   }) {
     return _api.patch(
       '/menu-items/$itemId',
       data: {
+        if (soldEverywhere) 'branches': null else 'branches': ?soldAt,
         if (useDefault) 'use_default': true,
         'reason': reason,
         'name': ?name,

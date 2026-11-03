@@ -92,6 +92,7 @@ class BranchPrice {
     required this.storeName,
     required this.price,
     required this.own,
+    this.onMenu = true,
   });
 
   factory BranchPrice.fromJson(Map<String, dynamic> json) => BranchPrice(
@@ -99,12 +100,16 @@ class BranchPrice {
     storeName: json['store_name'] as String,
     price: (json['price'] as num?)?.toDouble(),
     own: json['own'] as bool? ?? false,
+    onMenu: json['on_menu'] as bool? ?? true,
   );
 
   final int storeId;
   final String storeName;
   final double? price;
   final bool own;
+
+  /// Whether this branch sells the item.
+  final bool onMenu;
 }
 
 class PricedThing {

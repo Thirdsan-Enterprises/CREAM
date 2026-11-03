@@ -11,55 +11,7 @@ import '../../shared/models/customer.dart';
 import '../../shared/models/item.dart';
 import '../../shared/models/sale.dart';
 import '../customers/customers_view.dart';
-
-class _MenuLine {
-  _MenuLine(this.entry, this.qty);
-  final MenuEntry entry;
-  int qty;
-}
-
-/// Shows what a customer can spend right now, and flags in-line if the
-/// current cart would exceed it — so a cashier finds out before tapping
-/// "Complete sale," not after it gets rejected.
-class _CustomerAvailabilityNotice extends StatelessWidget {
-  const _CustomerAvailabilityNotice({
-    required this.available,
-    required this.total,
-  });
-
-  final double? available;
-  final double total;
-
-  @override
-  Widget build(BuildContext context) {
-    if (available == null) {
-      return const Text('Could not load balance — will be checked on submit.');
-    }
-
-    final exceeds = total > available!;
-    return Row(
-      children: [
-        Icon(
-          exceeds ? Icons.error_outline : Icons.check_circle_outline,
-          size: 18,
-          color: exceeds ? AppColors.danger : AppColors.success,
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            exceeds
-                ? 'Only ${CurrencyFormatter.format(available!)} available — over by ${CurrencyFormatter.format(total - available!)}.'
-                : 'Available: ${CurrencyFormatter.format(available!)}',
-            style: TextStyle(
-              color: exceeds ? AppColors.danger : null,
-              fontWeight: exceeds ? FontWeight.bold : null,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
+import 'pos_cart.dart';
 
 const _paymentMethods = ['cash', 'momo', 'airtel', 'account', 'lpo'];
 const _paymentLabels = {
@@ -67,12 +19,16 @@ const _paymentLabels = {
   'momo': 'MoMo',
   'airtel': 'Airtel',
   'account': 'Account',
-  // A one-off sale covered by a purchase order, no running balance —
-  // distinct from an "Account" sale charged to an LPO-funded customer,
-  // which is for a pool drawn down over many meals (see Accounts/Customers).
+  // A one-off sale covered by a purchase order, no running balance.
   'lpo': 'LPO',
 };
 
+/// Wide enough to show the order beside the menu (tablets, Fold open).
+const _sidePanelWidth = 840.0;
+
+/// The Sell screen: the branch's menu under its headings (Lunch, Breakfast,
+/// Drinks...), each item at this branch's price. Tap to add; the order and
+/// the Complete sale button are always one tap away.
 class SellScreen extends ConsumerStatefulWidget {
   /// [storeId] is only for the owner, who sells on behalf of a branch.
   /// Staff always sell for their own branch, so they leave it null.
@@ -85,21 +41,13 @@ class SellScreen extends ConsumerStatefulWidget {
 }
 
 class _SellScreenState extends ConsumerState<SellScreen> {
+  final _cart = PosCart();
+  final _search = TextEditingController();
+
   bool _loading = true;
   String? _loadError;
-  double _platePrice = 0;
-  List<MenuEntry> _menu = [];
-
-  // A sale starts empty: a plate is one tap, and an egg or a cup of tea on
-  // its own is never charged a plate by mistake.
-  int _plateQty = 0;
-  final List<_MenuLine> _lines = [];
-  String _paymentMethod = 'cash';
-  Customer? _selectedCustomer;
-  double? _selectedCustomerBalance;
-  AccountStanding? _selectedStanding;
-  bool _loadingCustomerBalance = false;
-  bool _submitting = false;
+  List<PosItem> _items = [];
+  String? _heading;
 
   @override
   void initState() {
@@ -107,108 +55,89 @@ class _SellScreenState extends ConsumerState<SellScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _cart.dispose();
+    _search.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _loadError = null;
     });
-
     try {
-      final repo = ref.read(itemsRepositoryProvider);
-      final results = await Future.wait([
-        repo.platePrice(storeId: widget.storeId),
-        repo.menu(storeId: widget.storeId),
-      ]);
+      final items = await _fetchItems();
+      if (!mounted) return;
       setState(() {
-        _platePrice = results[0] as double;
-        _menu = results[1] as List<MenuEntry>;
+        _items = items;
+        _heading ??= _defaultHeading(items);
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _loadError = e.toString();
+        _loadError = e is ApiException ? e.message : 'Could not load the menu.';
         _loading = false;
       });
     }
   }
 
-  /// Re-reads the menu quietly (no spinner) so the "left" counts are
-  /// current after a sale.
-  Future<void> _refreshMenu() async {
+  Future<List<PosItem>> _fetchItems() async {
+    final repo = ref.read(itemsRepositoryProvider);
+    final results = await Future.wait([
+      repo.platePrice(storeId: widget.storeId),
+      repo.menu(storeId: widget.storeId),
+    ]);
+    final platePrice = results[0] as double;
+    final menu = results[1] as List<MenuEntry>;
+    final items = [for (final entry in menu) PosItem.menu(entry)];
+    // A branch with no lunch dishes on its menu sells the plain plate.
+    if (!items.any((i) => i.category.toLowerCase() == 'lunch')) {
+      items.insert(0, PosItem.plate(platePrice));
+    }
+    return items;
+  }
+
+  /// Re-reads the menu quietly so "left" counts are current after a sale.
+  Future<void> _refresh() async {
     try {
-      final menu = await ref
-          .read(itemsRepositoryProvider)
-          .menu(storeId: widget.storeId);
-      if (mounted) setState(() => _menu = menu);
+      final items = await _fetchItems();
+      if (mounted) setState(() => _items = items);
     } catch (_) {
-      // Keep showing the previous counts; the server still enforces stock.
+      // Keep the previous counts; the server still enforces stock.
     }
   }
 
-  double get _total {
-    var total = _plateQty * _platePrice;
-    for (final line in _lines) {
-      total += line.qty * (line.entry.price ?? 0);
+  List<String> get _headings {
+    final seen = <String>[];
+    for (final item in _items) {
+      if (!seen.contains(item.category)) seen.add(item.category);
     }
-    return total;
+    return seen;
   }
 
-  /// "2 plates · 1 Soda · 2 Egg", shown above the total.
-  String get _cartSummary {
-    final parts = <String>[
-      if (_plateQty > 0) '$_plateQty ${_plateQty == 1 ? 'plate' : 'plates'}',
-      for (final line in _lines) '${line.qty} ${line.entry.item.name}',
-    ];
-    return parts.isEmpty ? 'Nothing added yet' : parts.join(' · ');
-  }
-
-  /// Menu entries grouped under their headings, in the server's order.
-  Map<String, List<MenuEntry>> get _menuByCategory {
-    final groups = <String, List<MenuEntry>>{};
-    for (final entry in _menu) {
-      groups.putIfAbsent(entry.category, () => []).add(entry);
+  /// Breakfast in the morning, lunch the rest of the day.
+  String? _defaultHeading(List<PosItem> items) {
+    final headings = {for (final i in items) i.category};
+    if (DateTime.now().hour < 11 && headings.contains('Breakfast')) {
+      return 'Breakfast';
     }
-    return groups;
+    return items.isEmpty ? null : items.first.category;
   }
 
-  _MenuLine? _lineFor(MenuEntry entry) =>
-      _lines.where((l) => l.entry.item.id == entry.item.id).firstOrNull;
-
-  void _increment(MenuEntry entry) {
-    final inCart = _lineFor(entry)?.qty ?? 0;
-    final stock = entry.tracksStock ? entry.balance : null;
-    if (stock != null && inCart + 1 > stock) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            stock <= 0
-                ? '${entry.item.name} is out of stock. Record the purchase first.'
-                : 'Only ${stock.toStringAsFixed(0)} ${entry.item.name} in stock.',
-          ),
-        ),
-      );
-      return;
+  List<PosItem> get _shown {
+    final query = _search.text.trim().toLowerCase();
+    if (query.isNotEmpty) {
+      return _items.where((i) => i.name.toLowerCase().contains(query)).toList();
     }
-    setState(() {
-      final existing = _lineFor(entry);
-      if (existing != null) {
-        existing.qty++;
-      } else {
-        _lines.add(_MenuLine(entry, 1));
-      }
-    });
+    return _items.where((i) => i.category == _heading).toList();
   }
 
-  void _decrement(MenuEntry entry) {
-    setState(() {
-      final existing = _lineFor(entry);
-      if (existing == null) return;
-      if (existing.qty > 1) {
-        existing.qty--;
-      } else {
-        _lines.remove(existing);
-      }
-    });
+  void _add(PosItem item) {
+    final problem = _cart.add(item);
+    if (problem != null) _snack(problem);
   }
 
   Future<void> _pickCustomer() async {
@@ -219,91 +148,68 @@ class _SellScreenState extends ConsumerState<SellScreen> {
     );
     if (customer == null) return;
 
-    setState(() {
-      _selectedCustomer = customer;
-      _selectedCustomerBalance = null;
-      _selectedStanding = null;
-      _loadingCustomerBalance = true;
+    _cart.update(() {
+      _cart.customer = customer;
+      _cart.standing = null;
+      _cart.loadingCustomer = true;
     });
-
     try {
       final standing = await ref
           .read(customersRepositoryProvider)
           .standing(customer.id);
-      if (!mounted || _selectedCustomer?.id != customer.id) return;
-      setState(() {
-        _selectedCustomerBalance = standing.balance;
-        _selectedStanding = standing;
-      });
+      if (_cart.customer?.id == customer.id) {
+        _cart.update(() => _cart.standing = standing);
+      }
     } catch (_) {
-      // Balance is a convenience preview only — the server re-checks it
-      // authoritatively on submit, so a fetch failure here isn't fatal.
+      // A preview only: the server checks the balance on submit.
     } finally {
-      if (mounted) setState(() => _loadingCustomerBalance = false);
+      _cart.update(() => _cart.loadingCustomer = false);
     }
   }
 
-  /// How much more this customer can spend right now: for prepaid, that's
-  /// just their balance; for credit, it's balance plus whatever headroom
-  /// is left under their credit limit.
-  double? get _selectedCustomerAvailable {
-    final balance = _selectedCustomerBalance;
-    final customer = _selectedCustomer;
-    if (balance == null || customer == null) return null;
-    return customer.isCredit ? balance + customer.creditLimit : balance;
-  }
-
-  /// Client-side preview only — the server re-checks this authoritatively
-  /// (and atomically, alongside stock/pricing) when the sale is submitted.
-  bool get _wouldExceedAccountBalance {
-    if (_paymentMethod != 'account') return false;
-    final available = _selectedCustomerAvailable;
-    if (available == null) return false;
-    return _total > available;
-  }
-
-  Future<void> _submit() async {
-    if (_paymentMethod == 'account' && _selectedCustomer == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Select a customer to charge this sale to.'),
-        ),
-      );
-      return;
+  /// Rings up the order. Returns true when the sale went through.
+  Future<bool> _submit() async {
+    if (_cart.paymentMethod == 'account' && _cart.customer == null) {
+      _snack('Select a customer to charge this sale to.');
+      return false;
     }
-
-    setState(() => _submitting = true);
-
+    _cart.update(() => _cart.submitting = true);
     try {
       final lines = <SaleLine>[
-        if (_plateQty > 0)
-          SaleLine(itemType: 'plate', qty: _plateQty.toDouble()),
-        for (final line in _lines)
-          SaleLine(
-            itemType: line.entry.item.isDrink ? 'drink' : 'item',
-            itemId: line.entry.item.id,
-            qty: line.qty.toDouble(),
-          ),
+        for (final line in _cart.lines)
+          line.item.isPlate
+              ? SaleLine(itemType: 'plate', qty: line.qty.toDouble())
+              : SaleLine(
+                  itemType: line.item.entry!.item.isDrink ? 'drink' : 'item',
+                  itemId: line.item.entry!.item.id,
+                  qty: line.qty.toDouble(),
+                ),
       ];
-
       final result = await ref
           .read(salesRepositoryProvider)
           .createSale(
-            paymentMethod: _paymentMethod,
-            customerId: _selectedCustomer?.id,
+            paymentMethod: _cart.paymentMethod,
+            customerId: _cart.customer?.id,
             storeId: widget.storeId,
             lines: lines,
           );
+      if (!mounted) return true;
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Sale completed.'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-      // An account that is now near or at its limit: say so while the
-      // customer is still at the counter.
+      final total = _cart.total;
+      _cart.reset();
+      _search.clear();
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              'Sale completed · ${CurrencyFormatter.format(total)}',
+            ),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      // An account now near or at its limit: say so while the customer is
+      // still at the counter.
       final account = result['customer_account'];
       if (account is Map<String, dynamic>) {
         final standing = AccountStanding.fromJson(account);
@@ -329,30 +235,58 @@ class _SellScreenState extends ConsumerState<SellScreen> {
           );
         }
       }
-      setState(() {
-        _plateQty = 0;
-        _selectedStanding = null;
-        _lines.clear();
-        _paymentMethod = 'cash';
-        _selectedCustomer = null;
-        _selectedCustomerBalance = null;
-      });
-      _refreshMenu();
+      _refresh();
+      return true;
     } catch (e) {
-      if (!mounted) return;
-      final message = e is ApiException ? e.message : 'Something went wrong.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: AppColors.danger),
-      );
+      if (mounted) {
+        _snack(
+          e is ApiException ? e.message : 'Something went wrong.',
+          error: true,
+        );
+      }
+      return false;
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      _cart.update(() => _cart.submitting = false);
     }
+  }
+
+  void _snack(String message, {bool error = false}) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: error ? AppColors.danger : null,
+        ),
+      );
+  }
+
+  Future<void> _openOrder() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.85,
+        maxChildSize: 0.95,
+        builder: (context, scroll) => OrderPanel(
+          cart: _cart,
+          scrollController: scroll,
+          onPickCustomer: _pickCustomer,
+          onSubmit: () async {
+            final done = await _submit();
+            if (done && sheetContext.mounted) Navigator.pop(sheetContext);
+          },
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
-
     if (_loadError != null) {
       return Center(
         child: Column(
@@ -360,231 +294,585 @@ class _SellScreenState extends ConsumerState<SellScreen> {
           children: [
             Text(_loadError!),
             const SizedBox(height: 12),
-            ElevatedButton(onPressed: _load, child: const Text('Retry')),
+            FilledButton(onPressed: _load, child: const Text('Retry')),
           ],
         ),
       );
     }
 
-    return SafeArea(
-      child: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= _sidePanelWidth;
+        final menu = _MenuPane(
+          items: _shown,
+          headings: _headings,
+          heading: _heading,
+          searching: _search.text.trim().isNotEmpty,
+          search: _search,
+          cart: _cart,
+          onSearch: () => setState(() {}),
+          onHeading: (h) => setState(() {
+            _heading = h;
+            _search.clear();
+          }),
+          onAdd: _add,
+          onRefresh: _refresh,
+        );
+
+        if (wide) {
+          return SafeArea(
+            child: Row(
               children: [
-                Text('Plate', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 4),
-                Text(
-                  'Tap + for each plate. Leave at 0 for drinks or breakfast on their own.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 8),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          CurrencyFormatter.format(_platePrice),
-                          style: Theme.of(context).textTheme.headlineMedium,
-                        ),
-                        Row(
-                          children: [
-                            IconButton.filledTonal(
-                              onPressed: _plateQty > 0
-                                  ? () => setState(() => _plateQty--)
-                                  : null,
-                              tooltip: 'One fewer plate',
-                              icon: const Icon(Icons.remove),
-                            ),
-                            SizedBox(
-                              width: 44,
-                              child: Text(
-                                '$_plateQty',
-                                textAlign: TextAlign.center,
-                                style: Theme.of(
-                                  context,
-                                ).textTheme.headlineSmall,
-                              ),
-                            ),
-                            IconButton.filledTonal(
-                              onPressed: () => setState(() => _plateQty++),
-                              tooltip: 'One more plate',
-                              icon: const Icon(Icons.add),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                Expanded(child: menu),
+                const VerticalDivider(width: 1),
+                SizedBox(
+                  width: 400,
+                  child: OrderPanel(
+                    cart: _cart,
+                    onPickCustomer: _pickCustomer,
+                    onSubmit: _submit,
                   ),
                 ),
-                for (final group in _menuByCategory.entries) ...[
-                  const SizedBox(height: 24),
-                  Text(
-                    group.key,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 12),
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: group.value.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          mainAxisSpacing: 10,
-                          crossAxisSpacing: 10,
-                          childAspectRatio: 0.85,
-                        ),
-                    itemBuilder: (context, index) {
-                      final entry = group.value[index];
-                      return _MenuTile(
-                        entry: entry,
-                        qty: _lineFor(entry)?.qty ?? 0,
-                        onAdd: () => _increment(entry),
-                        onRemove: () => _decrement(entry),
-                      );
-                    },
-                  ),
-                ],
-                if (_menu.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Text('Nothing else on the menu yet.'),
-                  ),
-                const SizedBox(height: 24),
-                Text(
-                  'Payment method',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final method in _paymentMethods)
-                      ChoiceChip(
-                        label: Text(_paymentLabels[method]!),
-                        selected: _paymentMethod == method,
-                        onSelected: (_) =>
-                            setState(() => _paymentMethod = method),
-                      ),
-                  ],
-                ),
-                if (_paymentMethod == 'account') ...[
-                  const SizedBox(height: 12),
-                  Card(
-                    child: Column(
-                      children: [
-                        ListTile(
-                          leading: const Icon(Icons.person_search),
-                          title: Text(
-                            _selectedCustomer?.name ?? 'Select customer',
-                          ),
-                          subtitle: _selectedCustomer != null
-                              ? Text(
-                                  '${_selectedCustomer!.phone} — ${_selectedCustomer!.accountTypeLabel}',
-                                )
-                              : null,
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: _pickCustomer,
-                        ),
-                        if (_selectedCustomer != null)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                            child: _loadingCustomerBalance
-                                ? const Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: SizedBox(
-                                      height: 16,
-                                      width: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    ),
-                                  )
-                                : Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      _CustomerAvailabilityNotice(
-                                        available: _selectedCustomerAvailable,
-                                        total: _total,
-                                      ),
-                                      if (_selectedStanding != null &&
-                                          _selectedStanding!.status !=
-                                              'ok') ...[
-                                        const SizedBox(height: 8),
-                                        StandingBanner(
-                                          standing: _selectedStanding!,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
               ],
             ),
+          );
+        }
+
+        return SafeArea(
+          child: Column(
+            children: [
+              Expanded(child: menu),
+              _OrderBar(cart: _cart, onOpen: _openOrder),
+            ],
           ),
-          // The total and the button stay put while the order scrolls, so
-          // completing a sale never means hunting for the button.
-          Material(
-            elevation: 8,
-            color: Theme.of(context).colorScheme.surface,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      _cartSummary,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium,
+        );
+      },
+    );
+  }
+}
+
+/// Search, headings and the grid of items.
+class _MenuPane extends StatelessWidget {
+  const _MenuPane({
+    required this.items,
+    required this.headings,
+    required this.heading,
+    required this.searching,
+    required this.search,
+    required this.cart,
+    required this.onSearch,
+    required this.onHeading,
+    required this.onAdd,
+    required this.onRefresh,
+  });
+
+  final List<PosItem> items;
+  final List<String> headings;
+  final String? heading;
+  final bool searching;
+  final TextEditingController search;
+  final PosCart cart;
+  final VoidCallback onSearch;
+  final ValueChanged<String> onHeading;
+  final ValueChanged<PosItem> onAdd;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: TextField(
+            controller: search,
+            onChanged: (_) => onSearch(),
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Search the menu',
+              prefixIcon: const Icon(Icons.search),
+              isDense: true,
+              suffixIcon: searching
+                  ? IconButton(
+                      tooltip: 'Clear search',
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        search.clear();
+                        onSearch();
+                      },
+                    )
+                  : null,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 48,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              for (final h in headings)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(h),
+                    selected: !searching && h == heading,
+                    showCheckmark: false,
+                    labelStyle: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
                     ),
+                    onSelected: (_) => onHeading(h),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: onRefresh,
+            child: items.isEmpty
+                ? ListView(
                     children: [
-                      Text(
-                        'Total',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      Text(
-                        CurrencyFormatter.format(_total),
-                        style: Theme.of(context).textTheme.headlineMedium,
+                      Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Center(
+                          child: Text(
+                            searching
+                                ? 'Nothing on the menu matches.'
+                                : 'Nothing under this heading yet.',
+                            style: theme.textTheme.bodyLarge,
+                          ),
+                        ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed:
-                          (_submitting ||
-                              _total <= 0 ||
-                              _wouldExceedAccountBalance)
-                          ? null
-                          : _submit,
-                      child: _submitting
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Complete sale'),
+                  )
+                : ListenableBuilder(
+                    listenable: cart,
+                    builder: (context, _) => GridView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 190,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: 1.05,
+                          ),
+                      itemCount: items.length,
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        return _ItemTile(
+                          item: item,
+                          qty: cart.qtyOf(item),
+                          onAdd: () => onAdd(item),
+                          onRemove: () => cart.removeOne(item),
+                        );
+                      },
                     ),
                   ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One item: name, price, what's left; tap to add. Once in the order it
+/// turns gold and shows how many, with a minus to take one off.
+class _ItemTile extends StatelessWidget {
+  const _ItemTile({
+    required this.item,
+    required this.qty,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  final PosItem item;
+  final int qty;
+  final VoidCallback onAdd;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final selected = qty > 0;
+    final left = item.stockLeft;
+    final out = left != null && left <= 0;
+
+    return Material(
+      color: selected
+          ? AppColors.gold.withValues(alpha: 0.16)
+          : theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: selected ? AppColors.gold : const Color(0xFFE6DED0),
+          width: selected ? 2 : 1,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onAdd,
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(right: selected ? 30 : 0),
+                      child: Text(
+                        item.name,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          height: 1.15,
+                          color: out
+                              ? AppColors.charcoal.withValues(alpha: 0.45)
+                              : AppColors.charcoal,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    CurrencyFormatter.format(item.price),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.charcoal,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  if (left != null)
+                    Text(
+                      out ? 'Out of stock' : '${left.toStringAsFixed(0)} left',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: out ? FontWeight.w800 : FontWeight.w500,
+                        color: out
+                            ? AppColors.danger
+                            : AppColors.charcoal.withValues(alpha: 0.6),
+                      ),
+                    ),
                 ],
               ),
             ),
+            if (selected) ...[
+              Positioned(
+                top: 8,
+                right: 8,
+                child: CircleAvatar(
+                  radius: 15,
+                  backgroundColor: AppColors.gold,
+                  child: Text(
+                    '$qty',
+                    style: const TextStyle(
+                      color: AppColors.charcoal,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 2,
+                right: 2,
+                child: IconButton(
+                  tooltip: 'One fewer ${item.name}',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.remove_circle_outline),
+                  color: AppColors.charcoal,
+                  onPressed: onRemove,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Phone: the order total pinned under the menu, one tap from paying.
+class _OrderBar extends StatelessWidget {
+  const _OrderBar({required this.cart, required this.onOpen});
+
+  final PosCart cart;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListenableBuilder(
+      listenable: cart,
+      builder: (context, _) => Material(
+        elevation: 8,
+        color: theme.colorScheme.surface,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      cart.isEmpty
+                          ? 'Tap items to start an order'
+                          : cart.summary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    Text(
+                      CurrencyFormatter.format(cart.total),
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 54,
+                child: FilledButton.icon(
+                  onPressed: cart.isEmpty ? null : onOpen,
+                  icon: const Icon(Icons.shopping_bag_outlined),
+                  label: Text(
+                    cart.isEmpty ? 'Order' : 'Order (${cart.count})',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The order: lines with +/−, how it is paid, the customer for an account
+/// sale, and the Complete sale button.
+class OrderPanel extends StatelessWidget {
+  const OrderPanel({
+    super.key,
+    required this.cart,
+    required this.onPickCustomer,
+    required this.onSubmit,
+    this.scrollController,
+  });
+
+  final PosCart cart;
+  final VoidCallback onPickCustomer;
+  final Future<void> Function() onSubmit;
+  final ScrollController? scrollController;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListenableBuilder(
+      listenable: cart,
+      builder: (context, _) {
+        final canCharge =
+            !cart.isEmpty && !cart.submitting && !cart.exceedsAccount;
+        return Column(
+          children: [
+            Expanded(
+              child: ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Order',
+                          style: theme.textTheme.headlineSmall,
+                        ),
+                      ),
+                      if (!cart.isEmpty)
+                        TextButton.icon(
+                          onPressed: cart.reset,
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: const Text('Clear'),
+                        ),
+                    ],
+                  ),
+                  if (cart.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Text('Tap items on the menu to add them.'),
+                    ),
+                  for (final line in cart.lines)
+                    _OrderLine(line: line, cart: cart),
+                  if (!cart.isEmpty) ...[
+                    const Divider(height: 28),
+                    Text('Paid by', style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final method in _paymentMethods)
+                          ChoiceChip(
+                            label: Text(_paymentLabels[method]!),
+                            selected: cart.paymentMethod == method,
+                            showCheckmark: false,
+                            labelStyle: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                            ),
+                            onSelected: (_) => cart.setPayment(method),
+                          ),
+                      ],
+                    ),
+                    if (cart.paymentMethod == 'account') ...[
+                      const SizedBox(height: 12),
+                      _AccountBox(cart: cart, onPick: onPickCustomer),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+            Material(
+              elevation: 6,
+              color: theme.colorScheme.surface,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Text('Total', style: theme.textTheme.titleLarge),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              CurrencyFormatter.format(cart.total),
+                              style: theme.textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: FilledButton(
+                        onPressed: canCharge ? onSubmit : null,
+                        child: cart.submitting
+                            ? const SizedBox(
+                                height: 22,
+                                width: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                'Complete sale',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _OrderLine extends StatelessWidget {
+  const _OrderLine({required this.line, required this.cart});
+
+  final CartLine line;
+  final PosCart cart;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  line.item.name,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                CurrencyFormatter.format(line.total),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${CurrencyFormatter.format(line.item.price)} each',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+              IconButton.filledTonal(
+                tooltip: 'Remove one ${line.item.name}',
+                onPressed: () => cart.removeOne(line.item),
+                icon: const Icon(Icons.remove),
+              ),
+              SizedBox(
+                width: 40,
+                child: Text(
+                  '${line.qty}',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleLarge,
+                ),
+              ),
+              IconButton.filledTonal(
+                tooltip: 'Add one ${line.item.name}',
+                onPressed: () {
+                  final problem = cart.add(line.item);
+                  if (problem != null) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(problem)));
+                  }
+                },
+                icon: const Icon(Icons.add),
+              ),
+            ],
           ),
         ],
       ),
@@ -592,115 +880,70 @@ class _SellScreenState extends ConsumerState<SellScreen> {
   }
 }
 
-/// A single tappable menu tile — the modern-POS grid pattern (Square,
-/// Toast, Clover): tap to add one, a badge shows the current quantity,
-/// a small remove control appears once it's in the cart.
-class _MenuTile extends StatelessWidget {
-  const _MenuTile({
-    required this.entry,
-    required this.qty,
-    required this.onAdd,
-    required this.onRemove,
-  });
+/// Account sale: who is charged, what they can spend, and any warning.
+class _AccountBox extends StatelessWidget {
+  const _AccountBox({required this.cart, required this.onPick});
 
-  final MenuEntry entry;
-  final int qty;
-  final VoidCallback onAdd;
-  final VoidCallback onRemove;
-
-  IconData get _icon => switch (entry.category.toLowerCase()) {
-    'drinks' => Icons.local_drink_outlined,
-    'breakfast' => Icons.free_breakfast_outlined,
-    'snacks' => Icons.cookie_outlined,
-    _ => Icons.restaurant_outlined,
-  };
+  final PosCart cart;
+  final VoidCallback onPick;
 
   @override
   Widget build(BuildContext context) {
-    final balance = entry.tracksStock ? entry.balance : null;
-    final selected = qty > 0;
-    final colorScheme = Theme.of(context).colorScheme;
-    // A selected tile is filled dark, so its text must turn light, or the
-    // item's name and price vanish the moment it is tapped.
-    final textColor = selected
-        ? colorScheme.onPrimaryContainer
-        : colorScheme.onSurface;
-
-    return Material(
-      color: selected
-          ? colorScheme.primaryContainer
-          : colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onAdd,
-        child: Stack(
-          children: [
+    final customer = cart.customer;
+    final standing = cart.standing;
+    final available = cart.available;
+    return Card(
+      child: Column(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.person_search),
+            title: Text(customer?.name ?? 'Select customer'),
+            subtitle: customer == null
+                ? null
+                : Text('${customer.phone} · ${customer.accountTypeLabel}'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: onPick,
+          ),
+          if (customer != null)
             Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(_icon, size: 28, color: textColor),
-                  const SizedBox(height: 8),
-                  Text(
-                    entry.item.name,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelLarge?.copyWith(color: textColor),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    CurrencyFormatter.format(entry.price ?? 0),
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: textColor),
-                  ),
-                  if (balance != null)
-                    Text(
-                      balance <= 0
-                          ? 'Out of stock'
-                          : '${balance.toStringAsFixed(0)} left',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontSize: 11,
-                        fontWeight: balance <= 0
-                            ? FontWeight.w800
-                            : FontWeight.w500,
-                        color: balance <= 0
-                            ? (selected
-                                  ? colorScheme.onPrimaryContainer
-                                  : AppColors.danger)
-                            : textColor.withValues(alpha: 0.7),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: cart.loadingCustomer
+                  ? const Align(
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (available == null)
+                          const Text(
+                            'Could not load the balance; it is checked on submit.',
+                          )
+                        else if (cart.exceedsAccount)
+                          Text(
+                            'Only ${CurrencyFormatter.format(available)} available: '
+                            'over by ${CurrencyFormatter.format(cart.total - available)}.',
+                            style: const TextStyle(
+                              color: AppColors.danger,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        else
+                          Text(
+                            'Available: ${CurrencyFormatter.format(available)}',
+                          ),
+                        if (standing != null && standing.status != 'ok') ...[
+                          const SizedBox(height: 8),
+                          StandingBanner(standing: standing),
+                        ],
+                      ],
                     ),
-                ],
-              ),
             ),
-            if (selected)
-              Positioned(
-                top: 4,
-                right: 4,
-                child: GestureDetector(
-                  onTap: onRemove,
-                  child: CircleAvatar(
-                    radius: 12,
-                    backgroundColor: colorScheme.primary,
-                    child: Text(
-                      '$qty',
-                      style: TextStyle(
-                        color: colorScheme.onPrimary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -791,8 +1034,4 @@ class _CustomerSearchSheetState extends ConsumerState<_CustomerSearchSheet> {
       ),
     );
   }
-}
-
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

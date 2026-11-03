@@ -39,7 +39,7 @@ class SettingsScreen extends StatelessWidget {
               tabs: [
                 Tab(text: 'Branches'),
                 Tab(text: 'Users'),
-                Tab(text: 'Items'),
+                Tab(text: 'Kitchen stock'),
                 Tab(text: 'Prices & menu'),
               ],
             ),

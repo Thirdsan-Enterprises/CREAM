@@ -300,11 +300,15 @@ class _BranchCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    branch.storeName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
+                  Flexible(
+                    child: Text(
+                      branch.storeName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                   if (branch.isMain) ...[
@@ -330,6 +334,7 @@ class _BranchCard extends StatelessWidget {
                     ),
                   ],
                   const Spacer(),
+                  const SizedBox(width: 4),
                   Icon(Icons.chevron_right, color: muted),
                 ],
               ),

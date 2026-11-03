@@ -83,7 +83,8 @@ List<_OutletTab> _tabsFor(User? user) {
         myDay,
       ];
     default:
-      return const [sell, stock, accounts, myDay];
+      // A cashier sells from the menu; kitchen stock is not theirs to see.
+      return const [sell, accounts, myDay];
   }
 }
 
