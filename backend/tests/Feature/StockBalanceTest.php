@@ -102,7 +102,14 @@ class StockBalanceTest extends TestCase
         $ownStore = Store::factory()->create();
         $otherStore = Store::factory()->create();
         $item = Item::factory()->create();
-        $user = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $ownStore->id]);
+        // Cashiers do not touch kitchen stock at all; a store manager is
+        // locked to their own branch whatever store_id is sent.
+        $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $ownStore->id]);
+        $this->actingAs($cashier)->postJson('/api/stock/consumption', ['item_id' => $item->id, 'qty' => 5])->assertForbidden();
+        $this->actingAs($cashier)->getJson('/api/stock/status')->assertForbidden();
+        $this->actingAs($cashier)->getJson('/api/items')->assertForbidden();
+
+        $user = User::factory()->create(['role' => User::ROLE_STORE_MANAGER, 'store_id' => $ownStore->id]);
 
         $response = $this->actingAs($user)->postJson('/api/stock/consumption', [
             'store_id' => $otherStore->id,

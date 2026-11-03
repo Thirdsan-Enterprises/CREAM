@@ -41,7 +41,11 @@ class StockService
 
     public function storeItemStatuses(int $storeId): array
     {
-        $settings = ItemStoreSetting::query()->where('store_id', $storeId)->with('item')->get();
+        // Only what is counted on a shelf: kitchen stock and drinks, not
+        // dishes made to order (lunch, tea).
+        $settings = ItemStoreSetting::query()->where('store_id', $storeId)
+            ->whereHas('item', fn ($q) => $q->where('tracks_stock', true))
+            ->with('item')->get();
 
         $balances = StockMovement::query()
             ->where('store_id', $storeId)

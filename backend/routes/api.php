@@ -28,24 +28,29 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
 
     Route::get('/stores', [StoreController::class, 'index']);
-    Route::get('/items', [ItemController::class, 'index']);
-    Route::get('/items/{item}/balances', [ItemController::class, 'balances']);
-
-    Route::get('/stock/movements', [StockMovementController::class, 'index']);
-    Route::get('/stock/status', [StockMovementController::class, 'status']);
-    Route::get('/transfers', [StockTransferController::class, 'index']);
-    Route::get('/transfers/{transfer}', [StockTransferController::class, 'show']);
 
     Route::get('/plate-price', [PlatePriceController::class, 'show']);
     Route::get('/drinks', [DrinkController::class, 'index']);
     Route::get('/menu', [MenuController::class, 'index']);
 
-    Route::get('/stock-requests', [StockRequestController::class, 'index']);
-    Route::post('/stock-requests', [StockRequestController::class, 'store']);
-    Route::get('/stock-requests/{stockRequest}', [StockRequestController::class, 'show']);
-    Route::post('/stock-requests/{stockRequest}/send', [StockRequestController::class, 'send']);
-    Route::post('/stock-requests/{stockRequest}/decline', [StockRequestController::class, 'decline']);
-    Route::post('/stock-requests/{stockRequest}/cancel', [StockRequestController::class, 'cancel']);
+    // Kitchen stock (raw materials) is for the owner, procurement and store
+    // managers. Cashiers only see the menu.
+    Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STORE_MANAGER.','.User::ROLE_STOREKEEPER)->group(function () {
+        Route::get('/items', [ItemController::class, 'index']);
+        Route::get('/items/{item}/balances', [ItemController::class, 'balances']);
+
+        Route::get('/stock/movements', [StockMovementController::class, 'index']);
+        Route::get('/stock/status', [StockMovementController::class, 'status']);
+        Route::get('/transfers', [StockTransferController::class, 'index']);
+        Route::get('/transfers/{transfer}', [StockTransferController::class, 'show']);
+
+        Route::get('/stock-requests', [StockRequestController::class, 'index']);
+        Route::post('/stock-requests', [StockRequestController::class, 'store']);
+        Route::get('/stock-requests/{stockRequest}', [StockRequestController::class, 'show']);
+        Route::post('/stock-requests/{stockRequest}/send', [StockRequestController::class, 'send']);
+        Route::post('/stock-requests/{stockRequest}/decline', [StockRequestController::class, 'decline']);
+        Route::post('/stock-requests/{stockRequest}/cancel', [StockRequestController::class, 'cancel']);
+    });
 
     Route::get('/sales', [SaleController::class, 'index']);
     Route::get('/sales/summary', [SaleController::class, 'summary']);
@@ -111,7 +116,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/transfers/{transfer}/confirm', [StockTransferController::class, 'confirm']);
     });
 
-    Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STORE_MANAGER.','.User::ROLE_CASHIER.','.User::ROLE_STOREKEEPER)->group(function () {
+    Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STORE_MANAGER.','.User::ROLE_STOREKEEPER)->group(function () {
         Route::post('/stock/consumption', [StockMovementController::class, 'consumption']);
     });
 

@@ -345,7 +345,9 @@ class BranchPerformanceService
     /** Every drink and other item sold on its own, with its menu category. */
     private function menuItems(Collection $items): Collection
     {
-        return $items->where('item_type', '!=', SaleItem::TYPE_PLATE)
+        // Lunch dishes are plates with a name (Beef, Fish...); the plain
+        // plate has no item and is reported as plates only.
+        return $items->filter(fn ($row) => $row->item_id !== null)
             ->groupBy('item_id')
             ->map(fn ($g, $itemId) => [
                 'item_id' => (int) $itemId,

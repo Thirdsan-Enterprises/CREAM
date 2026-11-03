@@ -34,9 +34,15 @@ class MenuController extends Controller
         $items = Item::query()
             ->where('is_active', true)
             ->where(fn ($q) => $q->where('is_sellable', true)->orWhere('is_drink', true))
-            ->orderBy('sell_category')
+            // Only what this branch sells.
+            ->when($storeId, fn ($q) => $q->whereDoesntHave(
+                'storeSettings',
+                fn ($s) => $s->where('store_id', $storeId)->where('on_menu', false),
+            ))
             ->orderBy('name')
-            ->get();
+            ->get()
+            ->sortBy(fn (Item $item) => [self::headingOrder($item), $item->name])
+            ->values();
 
         return $items->map(fn (Item $item) => [
             'item' => $item,
@@ -47,6 +53,33 @@ class MenuController extends Controller
                 ? $this->stockService->balance($item->id, $storeId)
                 : null,
         ])->values();
+    }
+
+    /** Lunch first, then breakfast, drinks, and any other headings. */
+    public static function headingOrder(Item $item): int
+    {
+        $heading = strtolower($item->sell_category ?? ($item->is_drink ? 'drinks' : 'other'));
+
+        return match ($heading) {
+            'lunch' => 0,
+            'breakfast' => 1,
+            'drinks' => 2,
+            default => 3,
+        };
+    }
+
+    /**
+     * The branches that sell an item: null means every branch.
+     *
+     * @param  array<int>|null  $storeIds
+     */
+    private function setBranches(Item $item, ?array $storeIds): void
+    {
+        ItemStoreSetting::backfillForItem($item);
+        ItemStoreSetting::where('item_id', $item->id)->update(['on_menu' => true]);
+        if ($storeIds !== null) {
+            ItemStoreSetting::where('item_id', $item->id)->whereNotIn('store_id', $storeIds)->update(['on_menu' => false]);
+        }
     }
 
     /**
@@ -64,6 +97,8 @@ class MenuController extends Controller
             'store_id' => ['nullable', 'exists:stores,id'],
             'tracks_stock' => ['sometimes', 'boolean'],
             'safety_stock' => ['nullable', 'numeric', 'min:0'],
+            'branches' => ['nullable', 'array'],
+            'branches.*' => ['integer', 'exists:stores,id'],
         ]);
 
         $item = DB::transaction(function () use ($data) {
@@ -93,6 +128,7 @@ class MenuController extends Controller
             }
 
             ItemStoreSetting::backfillForItem($item, (float) ($data['safety_stock'] ?? 0));
+            $this->setBranches($item, $data['branches'] ?? null);
             $this->setPrice($item, (float) $data['price'], $data['store_id'] ?? null);
 
             return $item;
@@ -117,6 +153,8 @@ class MenuController extends Controller
             'price' => ['sometimes', 'numeric', 'gt:0'],
             'store_id' => ['nullable', 'exists:stores,id'],
             'use_default' => ['sometimes', 'boolean'],
+            'branches' => ['sometimes', 'nullable', 'array'],
+            'branches.*' => ['integer', 'exists:stores,id'],
             'reason' => ['required', 'string', 'max:500'],
         ], [
             'reason.required' => 'Say why this is changing.',
@@ -136,6 +174,7 @@ class MenuController extends Controller
                 'tracks_stock' => (bool) $item->tracks_stock,
                 'is_active' => (bool) $item->is_active,
                 'price' => $this->pricingService->currentItemPrice($item->id, $storeId),
+                'sold_at' => $this->soldAt($item),
             ];
 
             $fields = array_intersect_key($data, array_flip(['name', 'unit', 'tracks_stock', 'is_active']));
@@ -152,6 +191,10 @@ class MenuController extends Controller
                 $this->setPrice($item, (float) $data['price'], $storeId);
             }
 
+            if (array_key_exists('branches', $data)) {
+                $this->setBranches($item, $data['branches']);
+            }
+
             $item->refresh();
             $after = [
                 'name' => $item->name,
@@ -160,6 +203,7 @@ class MenuController extends Controller
                 'tracks_stock' => (bool) $item->tracks_stock,
                 'is_active' => (bool) $item->is_active,
                 'price' => $this->pricingService->currentItemPrice($item->id, $storeId),
+                'sold_at' => $this->soldAt($item),
             ];
 
             $changes = EditLog::diff($before, $after);
@@ -174,6 +218,17 @@ class MenuController extends Controller
         });
 
         return response()->json($this->row($item->fresh(), $storeId));
+    }
+
+    /** "Kira, Town" or "All branches", for the change log. */
+    private function soldAt(Item $item): string
+    {
+        $off = ItemStoreSetting::where('item_id', $item->id)->where('on_menu', false)->pluck('store_id');
+        if ($off->isEmpty()) {
+            return 'All branches';
+        }
+
+        return Store::whereNotIn('id', $off)->orderBy('name')->pluck('name')->join(', ') ?: 'No branch';
     }
 
     private function setPrice(Item $item, float $price, ?int $storeId): void

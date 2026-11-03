@@ -118,11 +118,20 @@ class SaleController extends Controller
                 if ($line['item_type'] === SaleItem::TYPE_PLATE) {
                     $unitPrice = $this->pricingService->currentPlatePrice($storeId);
                     $itemId = null;
+                    $item = null;
                 } else {
                     $item = Item::findOrFail($line['item_id']);
                     if (! $item->is_sellable && ! $item->is_drink) {
                         throw ValidationException::withMessages([
                             'lines' => ["{$item->name} is not on the menu."],
+                        ]);
+                    }
+                    $offMenu = ItemStoreSetting::where('item_id', $item->id)->where('store_id', $storeId)
+                        ->where('on_menu', false)->exists();
+                    if ($offMenu) {
+                        $branch = Store::find($storeId)?->name;
+                        throw ValidationException::withMessages([
+                            'lines' => ["{$item->name} is not on the menu at {$branch}."],
                         ]);
                     }
                     $unitPrice = $this->pricingService->currentItemPrice($item->id, $storeId);
@@ -138,7 +147,9 @@ class SaleController extends Controller
                 $total += $lineTotal;
 
                 $lineInputs[] = [
-                    'item_type' => $line['item_type'] === SaleItem::TYPE_PLATE
+                    // A lunch (Beef, Fish...) is a plate: it counts in plates
+                    // sold and plate revenue, and names the dish.
+                    'item_type' => $line['item_type'] === SaleItem::TYPE_PLATE || self::isLunch($item ?? null)
                         ? SaleItem::TYPE_PLATE
                         : ($item->is_drink ? SaleItem::TYPE_DRINK : SaleItem::TYPE_ITEM),
                     'tracks_stock' => $line['item_type'] !== SaleItem::TYPE_PLATE && $item->tracks_stock,
@@ -190,6 +201,12 @@ class SaleController extends Controller
         }
 
         return response()->json($body, 201);
+    }
+
+    /** Dishes under the Lunch heading are plates. */
+    public static function isLunch(?Item $item): bool
+    {
+        return $item !== null && strcasecmp((string) $item->sell_category, 'Lunch') === 0;
     }
 
     /**

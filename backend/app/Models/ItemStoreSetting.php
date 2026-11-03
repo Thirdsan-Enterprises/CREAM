@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['item_id', 'store_id', 'safety_stock'])]
+#[Fillable(['item_id', 'store_id', 'safety_stock', 'on_menu'])]
 class ItemStoreSetting extends Model
 {
     /**
@@ -34,6 +34,11 @@ class ItemStoreSetting extends Model
                 ['safety_stock' => 0],
             );
         }
+    }
+
+    protected function casts(): array
+    {
+        return ['on_menu' => 'boolean'];
     }
 
     public function item(): BelongsTo

@@ -20,6 +20,9 @@ class ClientWalkthroughTest extends TestCase
 
     private ?string $token = null;
 
+    /** Stock is checked as the owner: cashiers cannot see kitchen stock. */
+    private ?string $ownerToken = null;
+
     /** Sign in through the real login endpoint and return the token. */
     private function login(string $phone, string $password): string
     {
@@ -46,7 +49,10 @@ class ClientWalkthroughTest extends TestCase
 
     private function stockOf(int $storeId, string $itemName): ?array
     {
+        $acting = $this->token;
+        $this->actAs($this->ownerToken);
         $rows = $this->api('GET', "/api/stock/status?store_id={$storeId}")->json('items');
+        $this->actAs($acting);
 
         return collect($rows)->firstWhere('item_name', $itemName);
     }
@@ -61,6 +67,7 @@ class ClientWalkthroughTest extends TestCase
 
         // 1. The owner signs in with the seeded account.
         $owner = $this->login('0700000000', 'password');
+        $this->ownerToken = $owner;
         $this->actAs($owner);
         $this->assertSame('admin', $this->api('GET', '/api/auth/me')->json('role'));
 

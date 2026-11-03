@@ -17,6 +17,12 @@ class ItemController extends Controller
     {
         $query = Item::query()->orderBy('name');
 
+        // The stock list: things bought and counted. Dishes made to order
+        // (lunch, tea) live on the menu only; ?all=1 includes them.
+        if (! $request->boolean('all')) {
+            $query->where('tracks_stock', true);
+        }
+
         if ($request->boolean('is_drink', false) && $request->has('is_drink')) {
             $query->where('is_drink', $request->boolean('is_drink'));
         }
