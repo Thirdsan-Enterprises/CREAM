@@ -29,8 +29,9 @@ class _PricesTabState extends ConsumerState<PricesTab> {
     _future = ref.read(itemsRepositoryProvider).priceList();
   }
 
-  void _reload() =>
-      setState(() => _future = ref.read(itemsRepositoryProvider).priceList());
+  void _reload() => setState(() {
+    _future = ref.read(itemsRepositoryProvider).priceList();
+  });
 
   void _toast(String message, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(

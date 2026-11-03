@@ -132,11 +132,11 @@ class _PipelineTabState extends ConsumerState<_PipelineTab> {
   }
 
   void _reload() {
-    setState(
-      () => _future = ref
+    setState(() {
+      _future = ref
           .read(cateringRepositoryProvider)
-          .orders(status: _statusFilter),
-    );
+          .orders(status: _statusFilter);
+    });
   }
 
   Future<void> _openOrder(CateringOrder order) async {
@@ -759,8 +759,9 @@ class _PackagesTabState extends ConsumerState<_PackagesTab> {
     _future = ref.read(cateringRepositoryProvider).packages();
   }
 
-  void _reload() =>
-      setState(() => _future = ref.read(cateringRepositoryProvider).packages());
+  void _reload() => setState(() {
+    _future = ref.read(cateringRepositoryProvider).packages();
+  });
 
   Future<void> _editPrice(CateringPackage package) async {
     final controller = TextEditingController(

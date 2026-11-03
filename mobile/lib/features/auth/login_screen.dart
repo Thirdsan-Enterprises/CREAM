@@ -315,8 +315,9 @@ class _ConnectionCheckSheetState extends State<_ConnectionCheckSheet> {
                     ),
                     const SizedBox(height: 12),
                     OutlinedButton(
-                      onPressed: () =>
-                          setState(() => _future = runConnectionChecks()),
+                      onPressed: () => setState(() {
+                        _future = runConnectionChecks();
+                      }),
                       child: const Text('Check again'),
                     ),
                   ],

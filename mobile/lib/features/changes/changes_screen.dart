@@ -48,7 +48,9 @@ class _ChangesScreenState extends ConsumerState<ChangesScreen> {
         subjectType: _type,
       );
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() => setState(() {
+    _future = _load();
+  });
 
   @override
   Widget build(BuildContext context) {

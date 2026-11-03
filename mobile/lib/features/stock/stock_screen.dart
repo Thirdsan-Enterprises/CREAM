@@ -68,7 +68,9 @@ class _BalancesTabState extends ConsumerState<_BalancesTab> {
   }
 
   void _reload() {
-    setState(() => _future = ref.read(stockRepositoryProvider).status());
+    setState(() {
+      _future = ref.read(stockRepositoryProvider).status();
+    });
   }
 
   Future<void> _recordPurchase(StoreItemStatus item) async {
@@ -480,7 +482,9 @@ class _IncomingTransfersTabState extends ConsumerState<_IncomingTransfersTab> {
   }
 
   void _reload() {
-    setState(() => _future = ref.read(stockRepositoryProvider).transfers());
+    setState(() {
+      _future = ref.read(stockRepositoryProvider).transfers();
+    });
   }
 
   @override

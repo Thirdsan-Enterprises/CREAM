@@ -584,7 +584,9 @@ class _CustomerDetailSheetState extends ConsumerState<CustomerDetailSheet> {
 
   void _reload() {
     _changed = true;
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
   }
 
   User? get _user => ref.read(authSessionProvider).user;

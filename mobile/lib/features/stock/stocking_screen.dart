@@ -9,6 +9,7 @@ import '../../core/auth/auth_session.dart';
 import '../../core/auth/store.dart';
 import '../../shared/formatters/date_formatter.dart';
 import '../../shared/models/item.dart';
+import 'kitchen_items.dart';
 import 'stock_requests.dart';
 import 'transfers_list.dart';
 
@@ -196,7 +197,7 @@ class StockingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: Column(
         children: [
           Material(
@@ -210,6 +211,7 @@ class StockingScreen extends StatelessWidget {
                 Tab(text: 'Send to branch'),
                 Tab(text: 'Transfers'),
                 Tab(text: 'Branch stock'),
+                Tab(text: 'Items'),
                 Tab(text: 'History'),
               ],
             ),
@@ -222,6 +224,7 @@ class StockingScreen extends StatelessWidget {
                 _TransferTab(),
                 TransfersListTab(),
                 BranchStockTab(),
+                KitchenItemsTab(),
                 _HistoryTab(),
               ],
             ),
@@ -646,8 +649,9 @@ class _HistoryTabState extends ConsumerState<_HistoryTab> {
     _future = ref.read(stockRepositoryProvider).movements();
   }
 
-  void _reload() =>
-      setState(() => _future = ref.read(stockRepositoryProvider).movements());
+  void _reload() => setState(() {
+    _future = ref.read(stockRepositoryProvider).movements();
+  });
 
   @override
   Widget build(BuildContext context) {

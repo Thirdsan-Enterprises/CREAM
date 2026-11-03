@@ -42,7 +42,9 @@ class _MyDayScreenState extends ConsumerState<MyDayScreen> {
     return (results[0] as SaleSummary, results[1] as List<SaleRecord>);
   }
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() => setState(() {
+    _future = _load();
+  });
 
   @override
   Widget build(BuildContext context) {

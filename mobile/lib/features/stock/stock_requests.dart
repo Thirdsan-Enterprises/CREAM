@@ -191,9 +191,9 @@ class _BranchRequestsTabState extends ConsumerState<BranchRequestsTab> {
     _future = ref.read(stockRequestsRepositoryProvider).list();
   }
 
-  void _reload() => setState(
-    () => _future = ref.read(stockRequestsRepositoryProvider).list(),
-  );
+  void _reload() => setState(() {
+    _future = ref.read(stockRequestsRepositoryProvider).list();
+  });
 
   Future<void> _newRequest() async {
     final sent = await showModalBottomSheet<bool>(
@@ -496,7 +496,9 @@ class _ProcurementRequestsTabState
       .read(stockRequestsRepositoryProvider)
       .list(status: _openOnly ? 'open' : null);
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() => setState(() {
+    _future = _load();
+  });
 
   Future<void> _send(StockRequest request) async {
     final controllers = {
@@ -726,9 +728,9 @@ class _BranchStockTabState extends ConsumerState<BranchStockTab> {
           return const Center(child: CircularProgressIndicator());
         }
         return RefreshIndicator(
-          onRefresh: () async => setState(
-            () => _future = ref.read(reportsRepositoryProvider).stockStatus(),
-          ),
+          onRefresh: () async => setState(() {
+            _future = ref.read(reportsRepositoryProvider).stockStatus();
+          }),
           child: ListView(
             padding: const EdgeInsets.all(12),
             children: [
