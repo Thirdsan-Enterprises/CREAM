@@ -76,6 +76,8 @@ class _BalancesTabState extends ConsumerState<_BalancesTab> {
   Future<void> _recordPurchase(StoreItemStatus item) async {
     final qtyController = TextEditingController();
     final noteController = TextEditingController();
+    final paidController = TextEditingController();
+    final supplierController = TextEditingController();
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -89,6 +91,18 @@ class _BalancesTabState extends ConsumerState<_BalancesTab> {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: 'Quantity bought'),
               autofocus: true,
+            ),
+            TextField(
+              controller: paidController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Amount paid in total',
+                prefixText: 'UGX ',
+              ),
+            ),
+            TextField(
+              controller: supplierController,
+              decoration: const InputDecoration(labelText: 'Bought from'),
             ),
             TextField(
               controller: noteController,
@@ -121,6 +135,8 @@ class _BalancesTabState extends ConsumerState<_BalancesTab> {
             itemId: item.itemId,
             qty: qty,
             note: noteController.text.isEmpty ? null : noteController.text,
+            totalCost: double.tryParse(paidController.text.trim()),
+            supplier: supplierController.text.trim(),
           );
       if (!mounted) return;
       ScaffoldMessenger.of(

@@ -29,6 +29,7 @@ class ItemsRepository {
     required double price,
     int? storeId,
     required bool tracksStock,
+    bool dailyStock = false,
     List<int>? soldAt,
   }) {
     return _api.post(
@@ -43,6 +44,7 @@ class ItemsRepository {
         'price': price,
         'store_id': ?storeId,
         'tracks_stock': tracksStock,
+        'daily_stock': dailyStock,
       },
     );
   }
@@ -56,6 +58,7 @@ class ItemsRepository {
     double? price,
     int? storeId,
     bool? tracksStock,
+    bool? dailyStock,
     bool? isActive,
     bool useDefault = false,
     List<int>? soldAt,
@@ -73,6 +76,7 @@ class ItemsRepository {
         'price': ?price,
         'store_id': ?storeId,
         'tracks_stock': ?tracksStock,
+        'daily_stock': ?dailyStock,
         'is_active': ?isActive,
       },
     );
@@ -88,10 +92,17 @@ class ItemsRepository {
 
   /// Kitchen stock items (what procurement buys). [includeRemoved] adds
   /// items taken off the list, so they can be added back.
-  Future<List<Item>> items({bool includeRemoved = false}) async {
+  Future<List<Item>> items({
+    bool includeRemoved = false,
+    bool withDrinks = false,
+  }) async {
     final body = await _api.get(
       '/items',
-      query: includeRemoved ? {'include_removed': '1'} : null,
+      query: {
+        if (includeRemoved) 'include_removed': '1',
+        // Branches buy their own drinks: the purchase screen lists them.
+        if (withDrinks) 'with_drinks': '1',
+      },
     );
     return (body['data'] as List<dynamic>)
         .map((e) => Item.fromJson(e as Map<String, dynamic>))

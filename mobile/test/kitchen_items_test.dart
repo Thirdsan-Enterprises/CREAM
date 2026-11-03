@@ -22,7 +22,10 @@ class _FakeItems extends ItemsRepository {
   String? removedWith;
 
   @override
-  Future<List<Item>> items({bool includeRemoved = false}) async => [
+  Future<List<Item>> items({
+    bool includeRemoved = false,
+    bool withDrinks = false,
+  }) async => [
     _i(1, 'Serviettes', 'Packaging & disposables'),
     _i(2, 'Charcoal', 'Fuel'),
     _i(3, 'Rice', 'Food'),

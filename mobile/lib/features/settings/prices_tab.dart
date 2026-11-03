@@ -134,21 +134,9 @@ class _PricesTabState extends ConsumerState<PricesTab> {
               onTap: () => Navigator.pop(context, 'details'),
             ),
             ListTile(
-              leading: Icon(
-                row.tracksStock
-                    ? Icons.inventory_2_outlined
-                    : Icons.all_inclusive,
-              ),
-              title: Text(
-                row.tracksStock
-                    ? 'Stop counting stock (made to order)'
-                    : 'Count stock for this item',
-              ),
-              subtitle: Text(
-                row.tracksStock
-                    ? 'Now: sales stop when the branch runs out.'
-                    : 'Now: always available, like a cup of tea.',
-              ),
+              leading: const Icon(Icons.inventory_2_outlined),
+              title: const Text('How it is counted'),
+              subtitle: Text(_countingLabel(_modeOf(row))),
               onTap: () => Navigator.pop(context, 'stock'),
             ),
             ListTile(
@@ -212,17 +200,34 @@ class _PricesTabState extends ConsumerState<PricesTab> {
           'Saved.',
         );
       case 'stock':
-        final reason = await askReason(
-          context,
-          row.tracksStock
-              ? 'Stop counting stock for ${row.item.name}?'
-              : 'Count stock for ${row.item.name}?',
+        final mode = await showDialog<String>(
+          context: context,
+          builder: (context) => SimpleDialog(
+            title: Text('How is ${row.item.name} counted?'),
+            children: [
+              for (final m in ['none', 'shelf', 'daily'])
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, m),
+                  child: ListTile(
+                    leading: Icon(
+                      m == _modeOf(row)
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_off,
+                    ),
+                    title: Text(_countingLabel(m)),
+                  ),
+                ),
+            ],
+          ),
         );
+        if (mode == null || mode == _modeOf(row) || !mounted) return;
+        final reason = await askReason(context, 'Why is this changing?');
         if (reason == null) return;
         await _save(
           () => repo.updateMenuItem(
             row.item.id,
-            tracksStock: !row.tracksStock,
+            tracksStock: mode != 'none',
+            dailyStock: mode == 'daily',
             reason: reason,
           ),
           'Saved.',
@@ -250,13 +255,9 @@ class _PricesTabState extends ConsumerState<PricesTab> {
     List<String> categories,
     List<(int, String)> branches,
   ) async {
-    final allItems = await ref.read(itemsRepositoryProvider).items();
-    if (!mounted) return;
-    final onMenu = (await _future).items.map((r) => r.item.id).toSet();
-    if (!mounted) return;
-    final stockItems = allItems
-        .where((i) => i.isActive && !onMenu.contains(i.id))
-        .toList();
+    // The menu holds only things sold ready; kitchen stock stays with
+    // procurement, so a menu item is never linked to a stock item.
+    const stockItems = <Item>[];
 
     final request = await showDialog<_NewMenuItem>(
       context: context,
@@ -276,6 +277,7 @@ class _PricesTabState extends ConsumerState<PricesTab> {
         category: request.category,
         price: request.price,
         tracksStock: request.tracksStock,
+        dailyStock: request.dailyStock,
         soldAt: request.soldAt,
       ),
       '${request.name ?? 'Item'} is on the menu.',
@@ -357,7 +359,10 @@ class _PricesTabState extends ConsumerState<PricesTab> {
                       title: row.item.name,
                       subtitle: [
                         _soldAtLabel(row),
-                        if (!row.tracksStock) 'Made to order',
+                        if (row.dailyStock)
+                          'Plates per day'
+                        else if (!row.tracksStock)
+                          'Made to order',
                         if (!row.isActive) 'Hidden from Sell',
                       ].join(' · '),
                       dimmed: !row.isActive,
@@ -751,6 +756,7 @@ class _NewMenuItem {
     required this.category,
     required this.price,
     required this.tracksStock,
+    this.dailyStock = false,
     this.soldAt,
   });
 
@@ -760,6 +766,7 @@ class _NewMenuItem {
   final String category;
   final double price;
   final bool tracksStock;
+  final bool dailyStock;
 
   /// Branch ids; null = every branch.
   final List<int>? soldAt;
@@ -786,7 +793,8 @@ class _AddToMenuDialogState extends State<_AddToMenuDialog> {
   final _unit = TextEditingController(text: 'piece');
   final _price = TextEditingController();
   String _category = 'Lunch';
-  bool _tracksStock = false;
+  // Lunch is plates counted per day; drinks are counted bottles.
+  String _mode = 'daily';
   late final Set<int> _soldAt = {for (final b in widget.branches) b.$1};
   String? _error;
 
@@ -812,7 +820,8 @@ class _AddToMenuDialogState extends State<_AddToMenuDialog> {
         unit: _fromStock == null ? _unit.text.trim() : null,
         category: _category,
         price: price,
-        tracksStock: _tracksStock,
+        tracksStock: _mode != 'none',
+        dailyStock: _mode == 'daily',
         soldAt: _soldAt.length == widget.branches.length
             ? null
             : _soldAt.toList(),
@@ -871,8 +880,11 @@ class _AddToMenuDialogState extends State<_AddToMenuDialog> {
               ],
               onChanged: (v) => setState(() {
                 _category = v ?? _category;
-                // Drinks are counted bottles; dishes are made to order.
-                _tracksStock = _category == 'Drinks';
+                _mode = switch (_category) {
+                  'Lunch' => 'daily',
+                  'Drinks' => 'shelf',
+                  _ => 'none',
+                };
               }),
             ),
             TextField(
@@ -885,16 +897,16 @@ class _AddToMenuDialogState extends State<_AddToMenuDialog> {
                 helperText: 'Give a branch its own price afterwards.',
               ),
             ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _tracksStock,
-              title: const Text('Count stock'),
-              subtitle: Text(
-                _tracksStock
-                    ? 'Sales stop when the branch runs out (eggs, sodas).'
-                    : 'Always available: made to order (tea, chapati).',
-              ),
-              onChanged: (v) => setState(() => _tracksStock = v),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              initialValue: _mode,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Counted'),
+              items: [
+                for (final m in ['none', 'shelf', 'daily'])
+                  DropdownMenuItem(value: m, child: Text(_countingLabel(m))),
+              ],
+              onChanged: (v) => setState(() => _mode = v ?? _mode),
             ),
             const SizedBox(height: 8),
             Align(
@@ -997,3 +1009,12 @@ class _BranchesDialogState extends State<_BranchesDialog> {
     );
   }
 }
+
+String _modeOf(MenuPriceRow row) =>
+    row.dailyStock ? 'daily' : (row.tracksStock ? 'shelf' : 'none');
+
+String _countingLabel(String mode) => switch (mode) {
+  'daily' => "Plates per day (Today's plates)",
+  'shelf' => 'Counted stock (drinks, bottles)',
+  _ => 'Not counted (always available)',
+};

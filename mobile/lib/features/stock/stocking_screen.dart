@@ -7,9 +7,11 @@ import '../../core/api/repositories/stock_repository.dart';
 import '../../core/api/repositories/stores_repository.dart';
 import '../../core/auth/auth_session.dart';
 import '../../core/auth/store.dart';
+import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/formatters/date_formatter.dart';
 import '../../shared/models/item.dart';
 import 'kitchen_items.dart';
+import 'purchases_ledger.dart';
 import 'stock_requests.dart';
 import 'transfers_list.dart';
 
@@ -197,7 +199,7 @@ class StockingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 7,
+      length: 8,
       child: Column(
         children: [
           Material(
@@ -208,6 +210,7 @@ class StockingScreen extends StatelessWidget {
               tabs: [
                 Tab(text: 'Requests'),
                 Tab(text: 'Purchase'),
+                Tab(text: 'Purchases ledger'),
                 Tab(text: 'Send to branch'),
                 Tab(text: 'Transfers'),
                 Tab(text: 'Branch stock'),
@@ -221,6 +224,7 @@ class StockingScreen extends StatelessWidget {
               children: [
                 ProcurementRequestsTab(),
                 _PurchaseTab(),
+                PurchasesLedgerTab(),
                 _TransferTab(),
                 TransfersListTab(),
                 BranchStockTab(),
@@ -251,6 +255,8 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
   Item? _selectedItem;
   final _qtyController = TextEditingController();
   final _noteController = TextEditingController();
+  final _paidController = TextEditingController();
+  final _supplierController = TextEditingController();
   bool _submitting = false;
 
   @override
@@ -260,7 +266,9 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
   }
 
   Future<void> _load() async {
-    final items = await ref.read(itemsRepositoryProvider).items();
+    final items = await ref
+        .read(itemsRepositoryProvider)
+        .items(withDrinks: true);
     final stores = await ref.read(storesRepositoryProvider).all();
     final main = stores.firstWhere((s) => s.isMain);
     if (!mounted) return;
@@ -322,6 +330,8 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
             storeId: store.id,
             qty: qty,
             note: _noteController.text.isEmpty ? null : _noteController.text,
+            totalCost: double.tryParse(_paidController.text.trim()),
+            supplier: _supplierController.text.trim(),
           );
 
       // Read the balance back so the person sees the stock really went in.
@@ -344,6 +354,7 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
       setState(() {
         _qtyController.clear();
         _noteController.clear();
+        _paidController.clear();
         _selectedItem = null;
       });
     } catch (e) {
@@ -354,10 +365,22 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
     }
   }
 
+  /// "UGX 4,200 per kg", once the quantity and amount are typed.
+  String? _unitCostHint() {
+    final qty = double.tryParse(_qtyController.text.trim());
+    final paid = double.tryParse(_paidController.text.trim());
+    if (qty == null || qty <= 0 || paid == null) {
+      return 'Goes in the purchases ledger.';
+    }
+    return '${CurrencyFormatter.format(paid / qty)} per ${_selectedItem?.unit ?? 'unit'}';
+  }
+
   @override
   void dispose() {
     _qtyController.dispose();
     _noteController.dispose();
+    _paidController.dispose();
+    _supplierController.dispose();
     super.dispose();
   }
 
@@ -423,6 +446,25 @@ class _PurchaseTabState extends ConsumerState<_PurchaseTab> {
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Quantity purchased',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _paidController,
+                keyboardType: TextInputType.number,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: 'Amount paid in total',
+                  prefixText: 'UGX ',
+                  helperText: _unitCostHint(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _supplierController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Bought from (supplier, market)',
                 ),
               ),
               const SizedBox(height: 12),

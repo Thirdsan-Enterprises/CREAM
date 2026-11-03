@@ -118,6 +118,9 @@ class SaleRecord {
     this.voidedAt,
     this.voidedByName,
     this.voidReason,
+    this.soldById,
+    this.discount = 0,
+    this.discountNote,
   });
 
   factory SaleRecord.fromJson(Map<String, dynamic> json) => SaleRecord(
@@ -143,6 +146,11 @@ class SaleRecord {
         ? json['voided_by']['name'] as String?
         : null),
     voidReason: json['void_reason'] as String?,
+    soldById: json['sold_by'] is Map
+        ? (json['sold_by'] as Map)['id'] as int?
+        : json['sold_by'] as int?,
+    discount: double.tryParse('${json['discount'] ?? 0}') ?? 0,
+    discountNote: json['discount_note'] as String?,
   );
 
   final int id;
@@ -157,6 +165,10 @@ class SaleRecord {
   final DateTime? voidedAt;
   final String? voidedByName;
   final String? voidReason;
+
+  final int? soldById;
+  final double discount;
+  final String? discountNote;
 
   bool get isVoided => voidedAt != null;
 

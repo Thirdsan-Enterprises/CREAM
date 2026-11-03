@@ -52,6 +52,7 @@ class PriceListController extends Controller
                 'item' => $item,
                 'category' => $item->sell_category ?? ($item->is_drink ? 'Drinks' : 'Other'),
                 'tracks_stock' => (bool) $item->tracks_stock,
+                'daily_stock' => (bool) $item->daily_stock,
                 'is_active' => (bool) $item->is_active,
                 'default' => $this->pricingService->currentItemPrice($item->id, null),
                 'branches' => $stores->map(fn (Store $store) => [

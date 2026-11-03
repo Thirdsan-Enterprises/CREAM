@@ -131,6 +131,7 @@ class MenuPriceRow extends PricedThing {
     required this.item,
     required this.category,
     required this.tracksStock,
+    this.dailyStock = false,
     required this.isActive,
     required super.defaultPrice,
     required super.branches,
@@ -140,6 +141,7 @@ class MenuPriceRow extends PricedThing {
     item: Item.fromJson(json['item'] as Map<String, dynamic>),
     category: json['category'] as String? ?? 'Other',
     tracksStock: json['tracks_stock'] as bool? ?? true,
+    dailyStock: json['daily_stock'] as bool? ?? false,
     isActive: json['is_active'] as bool? ?? true,
     defaultPrice: (json['default'] as num?)?.toDouble(),
     branches: _branches(json['branches']),
@@ -148,6 +150,9 @@ class MenuPriceRow extends PricedThing {
   final Item item;
   final String category;
   final bool tracksStock;
+
+  /// Plates counted per day (Today's plates).
+  final bool dailyStock;
   final bool isActive;
 }
 

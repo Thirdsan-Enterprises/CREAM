@@ -351,6 +351,7 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
   final _passwordController = TextEditingController();
   late String _role = widget.user.role;
   late Store? _store = widget.user.store;
+  late bool _canRecordExpenses = widget.user.canRecordExpenses;
   bool _submitting = false;
   late Future<List<Store>> _storesFuture;
 
@@ -396,6 +397,7 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
             storeId: _role == 'admin' || _role == 'storekeeper'
                 ? null
                 : _store?.id,
+            canRecordExpenses: _canRecordExpenses,
           );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -468,6 +470,17 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
                     'branches and answers their requests. Cannot sell.',
                   ),
                 ),
+              if (_role == 'cashier')
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _canRecordExpenses,
+                  title: const Text('Can record expenses'),
+                  subtitle: const Text(
+                    'Transport, small purchases paid from the takings. '
+                    'Managers always can.',
+                  ),
+                  onChanged: (v) => setState(() => _canRecordExpenses = v),
+                ),
               if (_role != 'admin' && _role != 'storekeeper') ...[
                 const SizedBox(height: 12),
                 DropdownButtonFormField<Store>(
@@ -514,6 +527,7 @@ class _NewUserSheetState extends ConsumerState<_NewUserSheet> {
   final _passwordController = TextEditingController();
   String _role = 'cashier';
   Store? _store;
+  bool _canRecordExpenses = false;
   bool _submitting = false;
   late Future<List<Store>> _storesFuture;
 
@@ -545,6 +559,7 @@ class _NewUserSheetState extends ConsumerState<_NewUserSheet> {
             storeId: _role == 'admin' || _role == 'storekeeper'
                 ? null
                 : _store?.id,
+            canRecordExpenses: _canRecordExpenses,
           );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -614,6 +629,17 @@ class _NewUserSheetState extends ConsumerState<_NewUserSheet> {
                     'Works at the procurement unit: buys stock, sends it to '
                     'branches and answers their requests. Cannot sell.',
                   ),
+                ),
+              if (_role == 'cashier')
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _canRecordExpenses,
+                  title: const Text('Can record expenses'),
+                  subtitle: const Text(
+                    'Transport, small purchases paid from the takings. '
+                    'Managers always can.',
+                  ),
+                  onChanged: (v) => setState(() => _canRecordExpenses = v),
                 ),
               if (_role != 'admin' && _role != 'storekeeper') ...[
                 const SizedBox(height: 12),
