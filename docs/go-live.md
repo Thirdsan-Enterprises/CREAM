@@ -65,3 +65,17 @@ php artisan cream:load-menu
 - It is safe to run again: it does not duplicate items and does not overwrite
   prices the owner has changed since (add `--update-prices` to reset them).
 - Other branch codes: `php artisan cream:load-menu --branches=TOWN,KIRA,NTINDA`.
+
+# Loading the procurement list (once)
+
+Cream's handwritten procurement list (sugar, serviettes, charcoal, Royco...)
+is loaded under headings (Food, Spices & seasoning, Packaging & disposables,
+Cleaning, Fuel) with:
+
+```
+php artisan cream:load-procurement-items
+```
+
+Safe to run again. After that, procurement and the owner add, rename or
+remove items in the app (Stocking > Items, or Settings > Kitchen stock).
+Run it after `cream:load-menu`.
