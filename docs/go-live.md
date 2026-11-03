@@ -57,9 +57,12 @@ php artisan migrate --force
 php artisan cream:load-menu
 ```
 
-- It puts the dishes on the menu at **Town** and **Kira** only, at the prices
-  in the document. Lugogo keeps its own menu (the plain plate) until its two
-  lunch variations are added from Settings > Prices & menu.
+- It puts the dishes on the menu at **Town** and **Kira**, at the prices in
+  the document, except that **every lunch at Kira is UGX 25,000**.
+- **Lugogo** gets its own two lunches: *Full plate* (15,000) and *Small plate*
+  (10,000). Rename or reprice them in Settings > Prices & menu.
+- Lunch dishes are **counted per day**: each morning the branch taps *Plates*
+  on the Sell screen and types how many of each dish were made.
 - Water and Soda are set to UGX 1,500 at Town and Kira; other branches keep
   their prices.
 - It is safe to run again: it does not duplicate items and does not overwrite
