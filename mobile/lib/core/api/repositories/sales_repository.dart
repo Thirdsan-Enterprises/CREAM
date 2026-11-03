@@ -14,10 +14,14 @@ class SalesRepository {
     int? customerId,
     int? storeId,
     required List<SaleLine> lines,
+    double discount = 0,
+    String? discountNote,
   }) {
     return _api.post(
       '/sales',
       data: {
+        if (discount > 0) 'discount': discount,
+        if (discount > 0) 'discount_note': discountNote,
         'payment_method': paymentMethod,
         'store_id': ?storeId,
         if (customerId != null) 'customer_id': customerId,

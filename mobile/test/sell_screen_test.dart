@@ -25,11 +25,13 @@ MenuEntry _entry(
   double price, {
   double? balance,
   bool tracks = false,
+  bool daily = false,
 }) => MenuEntry(
   item: _item(id, name, drink: category == 'Drinks'),
   price: price,
   category: category,
-  tracksStock: tracks,
+  tracksStock: tracks || daily,
+  dailyStock: daily,
   balance: balance,
 );
 
@@ -50,6 +52,8 @@ class _FakeSales extends SalesRepository {
 
   List<SaleLine>? sent;
   String? method;
+  double discount = 0;
+  String? discountNote;
 
   @override
   Future<Map<String, dynamic>> createSale({
@@ -57,9 +61,13 @@ class _FakeSales extends SalesRepository {
     int? customerId,
     int? storeId,
     required List<SaleLine> lines,
+    double discount = 0,
+    String? discountNote,
   }) async {
     sent = lines;
     method = paymentMethod;
+    this.discount = discount;
+    this.discountNote = discountNote;
     return {'id': 1};
   }
 }
@@ -97,6 +105,10 @@ Future<_FakeSales> _pump(
   await tester.pumpAndSettle();
   return sales;
 }
+
+Finder _dialogField(int i) => find
+    .descendant(of: find.byType(AlertDialog), matching: find.byType(TextField))
+    .at(i);
 
 Future<void> _heading(WidgetTester tester, String name) async {
   await tester.tap(find.widgetWithText(ChoiceChip, name));
@@ -202,5 +214,74 @@ void main() {
     await tester.tap(find.text('Fish'));
     await tester.pumpAndSettle();
     expect(find.text('UGX 12,000 each'), findsOneWidget);
+  });
+
+  testWidgets('40 plates are typed in, not tapped 40 times', (tester) async {
+    final sales = await _pump(tester, [
+      _entry(1, 'Beef', 'Lunch', 25000, balance: 60, daily: true),
+    ]);
+    expect(find.text('60 left today'), findsOneWidget);
+    await tester.longPress(find.text('Beef'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '40');
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(find.text('UGX 1,000,000'), findsOneWidget);
+
+    await tester.tap(find.text('Order (40)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Complete sale'));
+    await tester.pumpAndSettle();
+    expect(sales.sent!.single.qty, 40);
+  });
+
+  testWidgets('no more plates than were made today', (tester) async {
+    await _pump(tester, [
+      _entry(1, 'Beef', 'Lunch', 25000, balance: 0, daily: true),
+    ]);
+    expect(find.text('None left today'), findsOneWidget);
+    await tester.tap(find.text('Beef'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text("No Beef plates left today. Add today's plates first."),
+      findsOneWidget,
+    );
+    expect(find.text('Add plates'), findsOneWidget);
+  });
+
+  testWidgets('a line is cancelled and a discount needs a reason', (
+    tester,
+  ) async {
+    final sales = await _pump(tester, _townMenu);
+    await _heading(tester, 'Lunch');
+    await tester.tap(find.text('Beef'));
+    await tester.tap(find.text('Fish'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Order (2)'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Cancel Fish'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byTooltip('Cancel Fish'),
+      findsNothing,
+      reason: 'off the order',
+    );
+
+    await tester.tap(find.text('Add a discount'));
+    await tester.pumpAndSettle();
+    await tester.enterText(_dialogField(0), '2000');
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(find.text('Say why there is a discount.'), findsOneWidget);
+    await tester.enterText(_dialogField(1), 'Regular customer');
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(find.text('UGX 8,000'), findsWidgets);
+
+    await tester.tap(find.text('Complete sale'));
+    await tester.pumpAndSettle();
+    expect(sales.discount, 2000);
+    expect(sales.discountNote, 'Regular customer');
   });
 }

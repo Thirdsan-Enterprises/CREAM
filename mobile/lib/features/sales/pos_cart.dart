@@ -26,9 +26,13 @@ class PosItem {
 
   bool get isPlate => entry == null;
 
-  /// How many are left, for things counted on a shelf; null = no limit.
+  /// How many are left, for things counted on a shelf or plates counted
+  /// per day; null = no limit.
   double? get stockLeft =>
       entry != null && entry!.tracksStock ? entry!.balance : null;
+
+  /// Plates counted per day (lunch).
+  bool get isDaily => entry?.dailyStock ?? false;
 }
 
 class CartLine {
@@ -51,11 +55,20 @@ class PosCart extends ChangeNotifier {
   bool loadingCustomer = false;
   bool submitting = false;
 
+  /// Off the whole sale, with the reason ("regular customer").
+  double discount = 0;
+  String discountNote = '';
+
   List<CartLine> get lines => _lines.values.toList();
   bool get isEmpty => _lines.isEmpty;
   int qtyOf(PosItem item) => _lines[item.key]?.qty ?? 0;
   int get count => _lines.values.fold(0, (sum, l) => sum + l.qty);
-  double get total => _lines.values.fold(0, (sum, l) => sum + l.total);
+
+  /// Before any discount.
+  double get subtotal => _lines.values.fold(0, (sum, l) => sum + l.total);
+
+  /// What the customer pays.
+  double get total => subtotal - discount;
 
   /// What the customer can still spend, for an account sale.
   double? get available {
@@ -67,18 +80,45 @@ class PosCart extends ChangeNotifier {
   bool get exceedsAccount =>
       paymentMethod == 'account' && available != null && total > available!;
 
-  /// Adds one; returns a message instead when the shelf is empty.
-  String? add(PosItem item) {
+  /// Adds one; returns a message instead when there are none left.
+  String? add(PosItem item) => setQty(item, qtyOf(item) + 1);
+
+  /// Sets how many (typed in, e.g. 40); 0 removes the line. Returns a
+  /// message instead when there are not that many left.
+  String? setQty(PosItem item, int qty) {
     final left = item.stockLeft;
-    final inCart = qtyOf(item);
-    if (left != null && inCart + 1 > left) {
+    if (left != null && qty > left) {
+      if (item.isDaily) {
+        return left <= 0
+            ? "No ${item.name} plates left today. Add today's plates first."
+            : 'Only ${left.toStringAsFixed(0)} ${item.name} plates left today.';
+      }
       return left <= 0
           ? '${item.name} is out of stock. Record the purchase first.'
           : 'Only ${left.toStringAsFixed(0)} ${item.name} in stock.';
     }
-    _lines.putIfAbsent(item.key, () => CartLine(item, 0)).qty++;
+    if (qty <= 0) {
+      _lines.remove(item.key);
+    } else {
+      _lines.putIfAbsent(item.key, () => CartLine(item, 0)).qty = qty;
+    }
+    _clampDiscount();
     notifyListeners();
     return null;
+  }
+
+  void setDiscount(double amount, String note) {
+    discount = amount;
+    discountNote = note;
+    _clampDiscount();
+    notifyListeners();
+  }
+
+  void _clampDiscount() {
+    if (discount >= subtotal) {
+      discount = 0;
+      discountNote = '';
+    }
   }
 
   void removeOne(PosItem item) {
@@ -89,11 +129,13 @@ class PosCart extends ChangeNotifier {
     } else {
       _lines.remove(item.key);
     }
+    _clampDiscount();
     notifyListeners();
   }
 
   void removeLine(PosItem item) {
     _lines.remove(item.key);
+    _clampDiscount();
     notifyListeners();
   }
 
@@ -119,6 +161,8 @@ class PosCart extends ChangeNotifier {
     paymentMethod = 'cash';
     customer = null;
     standing = null;
+    discount = 0;
+    discountNote = '';
     notifyListeners();
   }
 

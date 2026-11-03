@@ -83,10 +83,16 @@ class StockRepository {
     int? storeId,
     required double qty,
     String? note,
+    double? unitCost,
+    double? totalCost,
+    String? supplier,
   }) {
     return _api.post(
       '/stock/purchase',
       data: {
+        'unit_cost': ?unitCost,
+        'total_cost': ?totalCost,
+        if (supplier != null && supplier.isNotEmpty) 'supplier': supplier,
         'item_id': itemId,
         if (storeId != null) 'store_id': storeId,
         'qty': qty,

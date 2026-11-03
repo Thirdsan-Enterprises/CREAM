@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
@@ -12,6 +13,7 @@ import '../../shared/models/item.dart';
 import '../../shared/models/sale.dart';
 import '../customers/customers_view.dart';
 import 'pos_cart.dart';
+import 'todays_plates.dart';
 
 const _paymentMethods = ['cash', 'momo', 'airtel', 'account', 'lpo'];
 const _paymentLabels = {
@@ -137,8 +139,26 @@ class _SellScreenState extends ConsumerState<SellScreen> {
 
   void _add(PosItem item) {
     final problem = _cart.add(item);
-    if (problem != null) _snack(problem);
+    if (problem == null) return;
+    if (item.isDaily) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(problem),
+            action: SnackBarAction(label: 'Add plates', onPressed: _plates),
+          ),
+        );
+    } else {
+      _snack(problem);
+    }
   }
+
+  Future<void> _plates() async {
+    if (await showTodaysPlates(context, storeId: widget.storeId)) _refresh();
+  }
+
+  bool get _hasDailyDishes => _items.any((i) => i.isDaily);
 
   Future<void> _pickCustomer() async {
     final customer = await showModalBottomSheet<Customer>(
@@ -192,6 +212,8 @@ class _SellScreenState extends ConsumerState<SellScreen> {
             customerId: _cart.customer?.id,
             storeId: widget.storeId,
             lines: lines,
+            discount: _cart.discount,
+            discountNote: _cart.discountNote,
           );
       if (!mounted) return true;
 
@@ -317,6 +339,7 @@ class _SellScreenState extends ConsumerState<SellScreen> {
           }),
           onAdd: _add,
           onRefresh: _refresh,
+          onPlates: _hasDailyDishes ? _plates : null,
         );
 
         if (wide) {
@@ -364,6 +387,7 @@ class _MenuPane extends StatelessWidget {
     required this.onHeading,
     required this.onAdd,
     required this.onRefresh,
+    this.onPlates,
   });
 
   final List<PosItem> items;
@@ -377,6 +401,9 @@ class _MenuPane extends StatelessWidget {
   final ValueChanged<PosItem> onAdd;
   final Future<void> Function() onRefresh;
 
+  /// Opens Today's plates; null where no dish is counted per day.
+  final VoidCallback? onPlates;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -384,98 +411,111 @@ class _MenuPane extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: TextField(
-            controller: search,
-            onChanged: (_) => onSearch(),
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              hintText: 'Search the menu',
-              prefixIcon: const Icon(Icons.search),
-              isDense: true,
-              suffixIcon: searching
-                  ? IconButton(
-                      tooltip: 'Clear search',
-                      icon: const Icon(Icons.close),
-                      onPressed: () {
-                        search.clear();
-                        onSearch();
-                      },
-                    )
-                  : null,
-            ),
-          ),
-        ),
-        SizedBox(
-          height: 48,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
             children: [
-              for (final h in headings)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(h),
-                    selected: !searching && h == heading,
-                    showCheckmark: false,
-                    labelStyle: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                    onSelected: (_) => onHeading(h),
-                  ),
+              Expanded(child: _searchField()),
+              if (onPlates != null) ...[
+                const SizedBox(width: 8),
+                FilledButton.tonalIcon(
+                  onPressed: onPlates,
+                  icon: const Icon(Icons.restaurant),
+                  label: const Text('Plates'),
                 ),
+              ],
             ],
           ),
         ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: onRefresh,
-            child: items.isEmpty
-                ? ListView(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Center(
-                          child: Text(
-                            searching
-                                ? 'Nothing on the menu matches.'
-                                : 'Nothing under this heading yet.',
-                            style: theme.textTheme.bodyLarge,
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : ListenableBuilder(
-                    listenable: cart,
-                    builder: (context, _) => GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 200,
-                            mainAxisSpacing: 10,
-                            crossAxisSpacing: 10,
-                            // Fixed height: more dishes on screen at once.
-                            mainAxisExtent: 112,
-                          ),
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        final item = items[index];
-                        return _ItemTile(
-                          item: item,
-                          qty: cart.qtyOf(item),
-                          onAdd: () => onAdd(item),
-                          onRemove: () => cart.removeOne(item),
-                        );
-                      },
-                    ),
-                  ),
-          ),
-        ),
+        SizedBox(height: 48, child: _headingChips()),
+        Expanded(child: _grid(theme)),
       ],
     );
   }
+
+  Widget _searchField() => TextField(
+    controller: search,
+    onChanged: (_) => onSearch(),
+    textInputAction: TextInputAction.search,
+    decoration: InputDecoration(
+      hintText: 'Search the menu',
+      prefixIcon: const Icon(Icons.search),
+      isDense: true,
+      suffixIcon: searching
+          ? IconButton(
+              tooltip: 'Clear search',
+              icon: const Icon(Icons.close),
+              onPressed: () {
+                search.clear();
+                onSearch();
+              },
+            )
+          : null,
+    ),
+  );
+
+  Widget _headingChips() => ListView(
+    scrollDirection: Axis.horizontal,
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    children: [
+      for (final h in headings)
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: ChoiceChip(
+            label: Text(h),
+            selected: !searching && h == heading,
+            showCheckmark: false,
+            labelStyle: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+            ),
+            onSelected: (_) => onHeading(h),
+          ),
+        ),
+    ],
+  );
+
+  Widget _grid(ThemeData theme) => RefreshIndicator(
+    onRefresh: onRefresh,
+    child: items.isEmpty
+        ? ListView(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(32),
+                child: Center(
+                  child: Text(
+                    searching
+                        ? 'Nothing on the menu matches.'
+                        : 'Nothing under this heading yet.',
+                    style: theme.textTheme.bodyLarge,
+                  ),
+                ),
+              ),
+            ],
+          )
+        : ListenableBuilder(
+            listenable: cart,
+            builder: (context, _) => GridView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 200,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                // Fixed height: more dishes on screen at once.
+                mainAxisExtent: 112,
+              ),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return _ItemTile(
+                  item: item,
+                  qty: cart.qtyOf(item),
+                  onAdd: () => onAdd(item),
+                  onRemove: () => cart.removeOne(item),
+                  onTypeQty: () => typeQuantity(context, cart, item),
+                );
+              },
+            ),
+          ),
+  );
 }
 
 /// One item: name, price, what's left; tap to add. Once in the order it
@@ -486,12 +526,16 @@ class _ItemTile extends StatelessWidget {
     required this.qty,
     required this.onAdd,
     required this.onRemove,
+    required this.onTypeQty,
   });
 
   final PosItem item;
   final int qty;
   final VoidCallback onAdd;
   final VoidCallback onRemove;
+
+  /// Press and hold: type how many (e.g. 40) instead of tapping.
+  final VoidCallback onTypeQty;
 
   @override
   Widget build(BuildContext context) {
@@ -512,7 +556,9 @@ class _ItemTile extends StatelessWidget {
               item.name,
               price,
               if (left != null)
-                out ? 'Out of stock' : '${left.toStringAsFixed(0)} left',
+                out
+                    ? (item.isDaily ? 'None left today' : 'Out of stock')
+                    : '${left.toStringAsFixed(0)} left${item.isDaily ? ' today' : ''}',
               if (selected) '$qty in order',
             ].join(', '),
             excludeSemantics: true,
@@ -530,6 +576,7 @@ class _ItemTile extends StatelessWidget {
               child: InkWell(
                 borderRadius: BorderRadius.circular(16),
                 onTap: onAdd,
+                onLongPress: onTypeQty,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
                   child: Column(
@@ -573,8 +620,10 @@ class _ItemTile extends StatelessWidget {
                       if (left != null)
                         Text(
                           out
-                              ? 'Out of stock'
-                              : '${left.toStringAsFixed(0)} left',
+                              ? (item.isDaily
+                                    ? 'None left today'
+                                    : 'Out of stock')
+                              : '${left.toStringAsFixed(0)} left${item.isDaily ? ' today' : ''}',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: out ? FontWeight.w800 : FontWeight.w500,
@@ -745,6 +794,31 @@ class OrderPanel extends StatelessWidget {
                   for (final line in cart.lines)
                     _OrderLine(line: line, cart: cart),
                   if (!cart.isEmpty) ...[
+                    const SizedBox(height: 4),
+                    if (cart.discount > 0)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.local_offer_outlined),
+                        title: Text(
+                          'Discount −${CurrencyFormatter.format(cart.discount)}',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        subtitle: Text(cart.discountNote),
+                        trailing: IconButton(
+                          tooltip: 'Remove the discount',
+                          icon: const Icon(Icons.close),
+                          onPressed: () => cart.setDiscount(0, ''),
+                        ),
+                      )
+                    else
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () => _askDiscount(context, cart),
+                          icon: const Icon(Icons.local_offer_outlined),
+                          label: const Text('Add a discount'),
+                        ),
+                      ),
                     const Divider(height: 28),
                     Text('Paid by', style: theme.textTheme.titleMedium),
                     const SizedBox(height: 8),
@@ -883,12 +957,26 @@ class _OrderLine extends StatelessWidget {
                 onPressed: () => cart.removeOne(line.item),
                 icon: const Icon(Icons.remove),
               ),
-              SizedBox(
-                width: 40,
-                child: Text(
-                  '${line.qty}',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleLarge,
+              // Tap the number to type it (e.g. 40) instead of tapping +.
+              Tooltip(
+                message: 'Type how many ${line.item.name}',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => typeQuantity(context, cart, line.item),
+                  child: Container(
+                    width: 52,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: theme.colorScheme.outline),
+                      ),
+                    ),
+                    child: Text(
+                      '${line.qty}',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.titleLarge,
+                    ),
+                  ),
                 ),
               ),
               IconButton.filledTonal(
@@ -903,11 +991,130 @@ class _OrderLine extends StatelessWidget {
                 },
                 icon: const Icon(Icons.add),
               ),
+              IconButton(
+                tooltip: 'Cancel ${line.item.name}',
+                onPressed: () => cart.removeLine(line.item),
+                icon: const Icon(Icons.close),
+                color: AppColors.danger,
+              ),
             ],
           ),
         ],
       ),
     );
+  }
+}
+
+/// A discount off the whole sale: how much, and why (required).
+Future<void> _askDiscount(BuildContext context, PosCart cart) async {
+  final amount = TextEditingController();
+  final note = TextEditingController();
+  String? error;
+  final result = await showDialog<(double, String)>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('Discount'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Sale: ${CurrencyFormatter.format(cart.subtotal)}'),
+            TextField(
+              controller: amount,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                labelText: 'Amount off',
+                prefixText: 'UGX ',
+              ),
+            ),
+            TextField(
+              controller: note,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                labelText: 'Why (shows in the reports)',
+                hintText: 'e.g. regular customer',
+                errorText: error,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = double.tryParse(amount.text) ?? 0;
+              if (value <= 0 || value >= cart.subtotal) {
+                setState(() => error = 'Enter an amount below the sale.');
+                return;
+              }
+              if (note.text.trim().isEmpty) {
+                setState(() => error = 'Say why there is a discount.');
+                return;
+              }
+              Navigator.pop(context, (value, note.text.trim()));
+            },
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (result != null) cart.setDiscount(result.$1, result.$2);
+}
+
+/// Type how many of an item (e.g. 40 plates) instead of tapping each one.
+Future<void> typeQuantity(
+  BuildContext context,
+  PosCart cart,
+  PosItem item,
+) async {
+  final controller = TextEditingController(
+    text: cart.qtyOf(item) > 0 ? '${cart.qtyOf(item)}' : '',
+  );
+  final left = item.stockLeft;
+  final qty = await showDialog<int>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('How many ${item.name}?'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        style: Theme.of(context).textTheme.headlineMedium,
+        textAlign: TextAlign.center,
+        decoration: InputDecoration(
+          helperText: [
+            '${CurrencyFormatter.format(item.price)} each',
+            if (left != null) '${left.toStringAsFixed(0)} left',
+          ].join(' · '),
+        ),
+        onSubmitted: (v) => Navigator.pop(context, int.tryParse(v) ?? 0),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () =>
+              Navigator.pop(context, int.tryParse(controller.text) ?? 0),
+          child: const Text('OK'),
+        ),
+      ],
+    ),
+  );
+  if (qty == null || !context.mounted) return;
+  final problem = cart.setQty(item, qty);
+  if (problem != null) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(problem)));
   }
 }
 

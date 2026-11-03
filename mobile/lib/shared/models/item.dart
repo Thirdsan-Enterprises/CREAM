@@ -34,6 +34,7 @@ class MenuEntry {
     this.balance,
     String? category,
     this.tracksStock = true,
+    this.dailyStock = false,
   }) : category = category ?? (item.isDrink ? 'Drinks' : 'Other');
 
   factory MenuEntry.fromJson(Map<String, dynamic> json) => MenuEntry(
@@ -42,6 +43,7 @@ class MenuEntry {
     balance: (json['balance'] as num?)?.toDouble(),
     category: json['category'] as String?,
     tracksStock: json['tracks_stock'] as bool? ?? true,
+    dailyStock: json['daily_stock'] as bool? ?? false,
   );
 
   final Item item;
@@ -52,6 +54,9 @@ class MenuEntry {
 
   /// False for things made to order (a cup of tea): never limited by stock.
   final bool tracksStock;
+
+  /// Plates counted per day (lunch): [balance] is what is left today.
+  final bool dailyStock;
 
   /// How many this branch has in stock; null when it doesn't track stock or
   /// the branch isn't known.
