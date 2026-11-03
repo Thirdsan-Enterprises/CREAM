@@ -67,6 +67,8 @@ class AppTheme {
         backgroundColor: AppColors.charcoal,
         foregroundColor: AppColors.cream,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -131,6 +133,9 @@ class AppTheme {
         backgroundColor: AppColors.cream,
         foregroundColor: AppColors.charcoal,
         elevation: 0,
+        // Stay cream when content scrolls underneath.
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(

@@ -45,3 +45,23 @@ options above; remove or edit them in Settings (users can be switched off there)
 
 Only run it on the live server once, deliberately, when the client has agreed that
 everything entered so far is trial data.
+
+# Loading the Town and Kira menu (once)
+
+The breakfast and lunch menu Cream sent in November 2026 (Beef 10,000, Fish
+12,000, Milk Tea 3,000, ...) is loaded with one command on the server, after
+the update that adds menus per branch has been deployed:
+
+```
+php artisan migrate --force
+php artisan cream:load-menu
+```
+
+- It puts the dishes on the menu at **Town** and **Kira** only, at the prices
+  in the document. Lugogo keeps its own menu (the plain plate) until its two
+  lunch variations are added from Settings > Prices & menu.
+- Water and Soda are set to UGX 1,500 at Town and Kira; other branches keep
+  their prices.
+- It is safe to run again: it does not duplicate items and does not overwrite
+  prices the owner has changed since (add `--update-prices` to reset them).
+- Other branch codes: `php artisan cream:load-menu --branches=TOWN,KIRA,NTINDA`.

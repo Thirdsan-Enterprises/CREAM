@@ -453,10 +453,11 @@ class _MenuPane extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                       gridDelegate:
                           const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 190,
-                            mainAxisSpacing: 12,
-                            crossAxisSpacing: 12,
-                            childAspectRatio: 1.05,
+                            maxCrossAxisExtent: 200,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                            // Fixed height: more dishes on screen at once.
+                            mainAxisExtent: 112,
                           ),
                       itemCount: items.length,
                       itemBuilder: (context, index) {
@@ -498,98 +499,128 @@ class _ItemTile extends StatelessWidget {
     final selected = qty > 0;
     final left = item.stockLeft;
     final out = left != null && left <= 0;
+    final price = CurrencyFormatter.format(item.price);
 
-    return Material(
-      color: selected
-          ? AppColors.gold.withValues(alpha: 0.16)
-          : theme.colorScheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: selected ? AppColors.gold : const Color(0xFFE6DED0),
-          width: selected ? 2 : 1,
-        ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onAdd,
-        child: Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.only(right: selected ? 30 : 0),
-                      child: Text(
-                        item.name,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          height: 1.15,
-                          color: out
-                              ? AppColors.charcoal.withValues(alpha: 0.45)
-                              : AppColors.charcoal,
+    // The tile itself adds one; the minus sits beside it, not inside, so a
+    // screen reader still reads the tile as one "add" button.
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Semantics(
+            button: true,
+            label: [
+              item.name,
+              price,
+              if (left != null)
+                out ? 'Out of stock' : '${left.toStringAsFixed(0)} left',
+              if (selected) '$qty in order',
+            ].join(', '),
+            excludeSemantics: true,
+            child: Material(
+              color: selected
+                  ? AppColors.gold.withValues(alpha: 0.16)
+                  : theme.colorScheme.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: selected ? AppColors.gold : const Color(0xFFE6DED0),
+                  width: selected ? 2 : 1,
+                ),
+              ),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: onAdd,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(right: selected ? 30 : 0),
+                          child: Text(
+                            item.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              height: 1.15,
+                              color: out
+                                  ? AppColors.charcoal.withValues(alpha: 0.45)
+                                  : AppColors.charcoal,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  Text(
-                    CurrencyFormatter.format(item.price),
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.charcoal,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                  if (left != null)
-                    Text(
-                      out ? 'Out of stock' : '${left.toStringAsFixed(0)} left',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: out ? FontWeight.w800 : FontWeight.w500,
-                        color: out
-                            ? AppColors.danger
-                            : AppColors.charcoal.withValues(alpha: 0.6),
+                      Padding(
+                        // Room for the minus button once it is in the order.
+                        padding: EdgeInsets.only(right: selected ? 34 : 0),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            price,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.charcoal,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                ],
+                      if (left != null)
+                        Text(
+                          out
+                              ? 'Out of stock'
+                              : '${left.toStringAsFixed(0)} left',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: out ? FontWeight.w800 : FontWeight.w500,
+                            color: out
+                                ? AppColors.danger
+                                : AppColors.charcoal.withValues(alpha: 0.6),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
-            if (selected) ...[
-              Positioned(
-                top: 8,
-                right: 8,
-                child: CircleAvatar(
-                  radius: 15,
-                  backgroundColor: AppColors.gold,
-                  child: Text(
-                    '$qty',
-                    style: const TextStyle(
-                      color: AppColors.charcoal,
-                      fontWeight: FontWeight.w800,
-                    ),
+          ),
+        ),
+        if (selected) ...[
+          Positioned(
+            top: 8,
+            right: 8,
+            child: ExcludeSemantics(
+              child: CircleAvatar(
+                radius: 15,
+                backgroundColor: AppColors.gold,
+                child: Text(
+                  '$qty',
+                  style: const TextStyle(
+                    color: AppColors.charcoal,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
-              Positioned(
-                bottom: 2,
-                right: 2,
-                child: IconButton(
-                  tooltip: 'One fewer ${item.name}',
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.remove_circle_outline),
-                  color: AppColors.charcoal,
-                  onPressed: onRemove,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
+            ),
+          ),
+          Positioned(
+            bottom: 2,
+            right: 2,
+            child: IconButton(
+              tooltip: 'One fewer ${item.name}',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.remove_circle_outline),
+              color: AppColors.charcoal,
+              onPressed: onRemove,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
