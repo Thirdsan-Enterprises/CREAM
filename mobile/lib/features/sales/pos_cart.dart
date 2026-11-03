@@ -33,6 +33,10 @@ class PosItem {
 
   /// Plates counted per day (lunch).
   bool get isDaily => entry?.dailyStock ?? false;
+
+  /// The takeaway packing charge (silver plate): not a tile on the menu,
+  /// added with the "Takeaway" switch on the order.
+  bool get isPacking => category.toLowerCase() == 'packing';
 }
 
 class CartLine {
@@ -62,10 +66,44 @@ class PosCart extends ChangeNotifier {
   /// What the customer handed over, for the change; optional.
   double? cashReceived;
 
+  /// The branch's packing charge (silver plate), if it has one.
+  PosItem? packing;
+
   List<CartLine> get lines => _lines.values.toList();
-  bool get isEmpty => _lines.isEmpty;
+
+  /// The food and drinks, without the packing charge.
+  List<CartLine> get foodLines =>
+      _lines.values.where((l) => !l.item.isPacking).toList();
+
+  /// How many packs (silver plates) for takeaway; 0 = eating in.
+  int get packs => packing == null ? 0 : qtyOf(packing!);
+  bool get takeaway => packs > 0;
+
+  /// Takeaway on: one pack per lunch plate (at least one); off: none.
+  void setTakeaway(bool on) {
+    final p = packing;
+    if (p == null) return;
+    if (!on) {
+      removeLine(p);
+      return;
+    }
+    final plates = foodLines
+        .where(
+          (l) => l.item.category.toLowerCase() == 'lunch' || l.item.isPlate,
+        )
+        .fold(0, (sum, l) => sum + l.qty);
+    setQty(p, plates > 0 ? plates : 1);
+  }
+
+  void setPacks(int n) {
+    final p = packing;
+    if (p == null) return;
+    n <= 0 ? removeLine(p) : setQty(p, n);
+  }
+
+  bool get isEmpty => foodLines.isEmpty;
   int qtyOf(PosItem item) => _lines[item.key]?.qty ?? 0;
-  int get count => _lines.values.fold(0, (sum, l) => sum + l.qty);
+  int get count => foodLines.fold(0, (sum, l) => sum + l.qty);
 
   /// Before any discount.
   double get subtotal => _lines.values.fold(0, (sum, l) => sum + l.total);
@@ -117,7 +155,13 @@ class PosCart extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// No food left: no packing either.
+  void _tidy() {
+    if (foodLines.isEmpty) _lines.removeWhere((_, l) => l.item.isPacking);
+  }
+
   void _clampDiscount() {
+    _tidy();
     if (discount >= subtotal) {
       discount = 0;
       discountNote = '';
@@ -171,5 +215,8 @@ class PosCart extends ChangeNotifier {
   }
 
   /// "2 Beef · 1 Milk Tea".
-  String get summary => lines.map((l) => '${l.qty} ${l.item.name}').join(' · ');
+  String get summary => [
+    for (final l in foodLines) '${l.qty} ${l.item.name}',
+    if (takeaway) 'takeaway',
+  ].join(' · ');
 }

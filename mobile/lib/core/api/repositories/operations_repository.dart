@@ -15,9 +15,11 @@ class DailyDish {
       category = json['category'] as String?,
       prepared = _n(json['prepared']),
       sold = _n(json['sold']),
-      left = _n(json['left']);
+      left = _n(json['left']),
+      canSet = json['can_set'] as bool? ?? true;
 
   final int itemId;
+  final bool canSet;
   final String name;
   final String? category;
   final double prepared;

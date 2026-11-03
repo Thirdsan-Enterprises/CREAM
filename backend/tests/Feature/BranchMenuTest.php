@@ -73,7 +73,7 @@ class BranchMenuTest extends TestCase
     {
         $cashier = $this->cashierAt($this->town);
         $town = $this->menu($cashier);
-        $this->actingAs($cashier)->postJson('/api/daily-plates', ['items' => [
+        $this->actingAs($this->owner)->postJson('/api/daily-plates', ['store_id' => $this->town->id, 'items' => [
             ['item_id' => $town['Beef']['item']['id'], 'qty' => 40],
             ['item_id' => $town['Fish']['item']['id'], 'qty' => 20],
         ]])->assertOk();
@@ -135,11 +135,15 @@ class BranchMenuTest extends TestCase
     public function test_breakfast_cassava_is_a_dish_not_the_kitchen_cassava(): void
     {
         $dish = Item::where('name', 'Cassava')->where('is_sellable', true)->sole();
-        $this->assertFalse((bool) $dish->tracks_stock);
+        $this->assertTrue((bool) $dish->daily_stock, 'Town counts its breakfast each morning');
         $kitchen = Item::where('name', 'Cassava')->where('is_sellable', false)->sole();
         $this->assertTrue((bool) $kitchen->tracks_stock);
+        $this->assertFalse((bool) $kitchen->daily_stock);
 
         $cashier = $this->cashierAt($this->town);
+        $this->actingAs($cashier)->postJson('/api/daily-plates', ['items' => [
+            ['item_id' => $dish->id, 'qty' => 10],
+        ]])->assertOk();
         $this->actingAs($cashier)->postJson('/api/sales', ['payment_method' => 'cash', 'lines' => [
             ['item_type' => 'item', 'item_id' => $dish->id, 'qty' => 2],
         ]])->assertCreated()->assertJsonPath('total', '1000.00');

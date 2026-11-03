@@ -50,10 +50,12 @@ class NovemberChangesTest extends TestCase
         return collect($this->actingAs($user)->getJson('/api/menu')->json())->keyBy('item.name');
     }
 
+    /** Procurement sets the branch's lunch plates for the day. */
     private function prepare(User $user, array $plates): void
     {
         $menu = $this->menu($user);
-        $this->actingAs($user)->postJson('/api/daily-plates', ['items' => collect($plates)
+        $procurement = User::factory()->create(['role' => User::ROLE_STOREKEEPER, 'store_id' => $this->kira->id]);
+        $this->actingAs($procurement)->postJson('/api/daily-plates', ['store_id' => $user->store_id, 'items' => collect($plates)
             ->map(fn ($qty, $name) => ['item_id' => $menu[$name]['item']['id'], 'qty' => $qty])->values()->all()])->assertOk();
     }
 
@@ -77,7 +79,8 @@ class NovemberChangesTest extends TestCase
         $kira = $this->menu($this->cashier($this->kira));
         $this->assertEquals(25000, $kira['Beef']['price']);
         $this->assertEquals(25000, $kira['Peas']['price']);
-        $this->assertEquals(3000, $kira['Milk Tea']['price'], 'breakfast is the Town price');
+        $this->assertFalse($kira->has('Milk Tea'), 'breakfast is sold at Town only');
+        $this->assertEquals(3000, $this->menu($this->cashier($this->town))['Milk Tea']['price']);
         $this->assertEquals(10000, $this->menu($this->cashier($this->town))['Beef']['price']);
         $this->assertFalse($this->menu($this->cashier($this->town))->has('Beans'));
 
@@ -105,7 +108,7 @@ class NovemberChangesTest extends TestCase
         $this->assertSame(1, \App\Models\Item::where('name', 'Beef')->count());
     }
 
-    public function test_earlier_lugogo_names_are_renamed_and_silver_plate_is_a_takeaway_charge_everywhere(): void
+    public function test_earlier_lugogo_names_are_renamed_and_silver_plate_is_a_packing_charge_everywhere(): void
     {
         // As an earlier load left it.
         $full = $this->menu($this->cashier($this->lugogo))['Beef']['item']['id'];
@@ -117,7 +120,7 @@ class NovemberChangesTest extends TestCase
 
         foreach ([$this->lugogo, $this->town, $this->kira] as $store) {
             $silver = $this->menu($this->cashier($store))['Silver plate'];
-            $this->assertSame('Takeaway', $silver['category']);
+            $this->assertSame('Packing', $silver['category']);
             $this->assertEquals(500, $silver['price']);
         }
     }
@@ -254,5 +257,41 @@ class NovemberChangesTest extends TestCase
 
         $this->actingAs($this->cashier($this->lugogo))->getJson("/api/sales/{$id}/receipt")->assertForbidden();
         $this->actingAs($this->owner)->getJson("/api/sales/{$id}/receipt")->assertOk();
+    }
+
+    public function test_lunch_plates_are_set_by_procurement_and_town_counts_its_breakfast(): void
+    {
+        $cashier = $this->cashier($this->town);
+        $menu = $this->menu($cashier);
+
+        // The branch cannot set its own lunch plates.
+        $this->actingAs($cashier)->postJson('/api/daily-plates', ['items' => [
+            ['item_id' => $menu['Beef']['item']['id'], 'qty' => 40],
+        ]])->assertUnprocessable();
+
+        // It counts its breakfast: 60 chapatis this morning.
+        $this->actingAs($cashier)->postJson('/api/daily-plates', ['items' => [
+            ['item_id' => $menu['Chapati']['item']['id'], 'qty' => 60],
+        ]])->assertOk();
+        $dishes = collect($this->actingAs($cashier)->getJson('/api/daily-plates')->json('dishes'))->keyBy('name');
+        $this->assertFalse($dishes['Beef']['can_set']);
+        $this->assertTrue($dishes['Chapati']['can_set']);
+        $this->assertEquals(60, $dishes['Chapati']['left']);
+        $this->assertFalse($dishes->has('Milk Tea'), 'tea is made to order, not counted');
+
+        // Procurement sets Town's lunch from Kira.
+        $this->prepare($cashier, ['Beef' => 40]);
+        $this->sell($cashier, ['Beef' => 2, 'Chapati' => 3, 'Milk Tea' => 1])->assertCreated();
+        $dishes = collect($this->actingAs($cashier)->getJson('/api/daily-plates')->json('dishes'))->keyBy('name');
+        $this->assertEquals(38, $dishes['Beef']['left']);
+        $this->assertEquals(57, $dishes['Chapati']['left']);
+    }
+
+    public function test_packing_is_added_as_a_line_when_food_is_taken_away(): void
+    {
+        $cashier = $this->cashier($this->town);
+        $this->prepare($cashier, ['Beef' => 10]);
+        $sale = $this->sell($cashier, ['Beef' => 2, 'Silver plate' => 2])->assertCreated();
+        $this->assertEquals(21000, (float) $sale->json('total'));
     }
 }
