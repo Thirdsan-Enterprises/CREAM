@@ -59,6 +59,9 @@ class PosCart extends ChangeNotifier {
   double discount = 0;
   String discountNote = '';
 
+  /// What the customer handed over, for the change; optional.
+  double? cashReceived;
+
   List<CartLine> get lines => _lines.values.toList();
   bool get isEmpty => _lines.isEmpty;
   int qtyOf(PosItem item) => _lines[item.key]?.qty ?? 0;
@@ -163,6 +166,7 @@ class PosCart extends ChangeNotifier {
     standing = null;
     discount = 0;
     discountNote = '';
+    cashReceived = null;
     notifyListeners();
   }
 

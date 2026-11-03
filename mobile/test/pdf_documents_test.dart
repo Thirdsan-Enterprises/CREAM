@@ -211,4 +211,32 @@ void main() {
     final out = Platform.environment['PDF_OUT'];
     if (out != null) File('$out/day.pdf').writeAsBytesSync(bytes);
   });
+
+  test('a customer receipt renders on a till roll', () async {
+    final receipt = Receipt.fromJson({
+      'number': 1042,
+      'sold_at': '2026-11-05T10:15:00Z',
+      'store': {
+        'name': 'Town',
+        'address': 'Kampala Road',
+        'phone': '0700000000',
+      },
+      'cashier': 'Joy Akello',
+      'lines': [
+        {'name': 'Beef', 'qty': 2, 'unit_price': 25000, 'total': 50000},
+        {'name': 'Passion Juice', 'qty': 1, 'unit_price': 5000, 'total': 5000},
+      ],
+      'subtotal': 55000,
+      'discount': 5000,
+      'discount_note': 'Regular customer',
+      'total': 50000,
+      'payment_method': 'cash',
+      'customer': null,
+      'voided': false,
+    });
+    final bytes = await receiptPdf(receipt, cashReceived: 60000);
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+    final out = Platform.environment['PDF_OUT'];
+    if (out != null) File('$out/receipt.pdf').writeAsBytesSync(bytes);
+  });
 }

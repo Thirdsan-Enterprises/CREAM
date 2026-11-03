@@ -15,6 +15,7 @@ use App\Http\Controllers\MenuController;
 use App\Http\Controllers\PlatePriceController;
 use App\Http\Controllers\PriceListController;
 use App\Http\Controllers\PurchaseLedgerController;
+use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\StockMovementController;
@@ -63,6 +64,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/sales', [SaleController::class, 'index']);
     Route::get('/sales/summary', [SaleController::class, 'summary']);
+    Route::get('/sales/{sale}/receipt', [ReceiptController::class, 'show']);
 
     Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STORE_MANAGER)->group(function () {
         Route::get('/edit-logs', [EditLogController::class, 'index']);

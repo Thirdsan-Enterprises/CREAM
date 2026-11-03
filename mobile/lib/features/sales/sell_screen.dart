@@ -13,6 +13,7 @@ import '../../shared/models/item.dart';
 import '../../shared/models/sale.dart';
 import '../customers/customers_view.dart';
 import 'pos_cart.dart';
+import 'sale_complete.dart';
 import 'todays_plates.dart';
 
 const _paymentMethods = ['cash', 'momo', 'airtel', 'account', 'lpo'];
@@ -218,45 +219,32 @@ class _SellScreenState extends ConsumerState<SellScreen> {
       if (!mounted) return true;
 
       final total = _cart.total;
+      final cash = _cart.paymentMethod == 'cash' ? _cart.cashReceived : null;
+      final saleId = result['id'] as int?;
       _cart.reset();
       _search.clear();
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              'Sale completed · ${CurrencyFormatter.format(total)}',
-            ),
-            backgroundColor: AppColors.success,
-          ),
-        );
       // An account now near or at its limit: say so while the customer is
       // still at the counter.
+      String? warning;
+      var blocked = false;
       final account = result['customer_account'];
       if (account is Map<String, dynamic>) {
         final standing = AccountStanding.fromJson(account);
-        if (standing.warning != null) {
-          showDialog<void>(
-            context: context,
-            builder: (context) => AlertDialog(
-              icon: Icon(
-                standing.isBlocked ? Icons.block : Icons.warning_amber,
-                color: standing.isBlocked
-                    ? AppColors.danger
-                    : const Color(0xFFB7791F),
-              ),
-              title: const Text('Sale completed'),
-              content: Text(standing.warning!),
-              actions: [
-                FilledButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        }
+        warning = standing.warning;
+        blocked = standing.isBlocked;
       }
+      // After the order sheet has closed: the sale-complete screen.
+      Future.delayed(const Duration(milliseconds: 250), () {
+        if (!mounted) return;
+        showSaleComplete(
+          context,
+          saleId: saleId,
+          total: total,
+          cashReceived: cash,
+          warning: warning,
+          blocked: blocked,
+        );
+      });
       _refresh();
       return true;
     } catch (e) {
@@ -838,6 +826,10 @@ class OrderPanel extends StatelessWidget {
                           ),
                       ],
                     ),
+                    if (cart.paymentMethod == 'cash') ...[
+                      const SizedBox(height: 12),
+                      _CashBox(cart: cart),
+                    ],
                     if (cart.paymentMethod == 'account') ...[
                       const SizedBox(height: 12),
                       _AccountBox(cart: cart, onPick: onPickCustomer),
@@ -1115,6 +1107,70 @@ Future<void> typeQuantity(
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(problem)));
+  }
+}
+
+/// Cash: type what the customer handed over, see the change at once.
+class _CashBox extends StatefulWidget {
+  const _CashBox({required this.cart});
+
+  final PosCart cart;
+
+  @override
+  State<_CashBox> createState() => _CashBoxState();
+}
+
+class _CashBoxState extends State<_CashBox> {
+  late final _controller = TextEditingController(
+    text: widget.cart.cashReceived?.toStringAsFixed(0) ?? '',
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cart = widget.cart;
+    final received = cart.cashReceived;
+    final change = received == null ? null : received - cart.total;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _controller,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(
+              labelText: 'Cash received (optional)',
+              prefixText: 'UGX ',
+              isDense: true,
+            ),
+            onChanged: (v) =>
+                cart.update(() => cart.cashReceived = double.tryParse(v)),
+          ),
+        ),
+        const SizedBox(width: 12),
+        if (change != null)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(change < 0 ? 'Short by' : 'Change'),
+              Text(
+                CurrencyFormatter.format(change.abs()),
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: change < 0 ? AppColors.danger : AppColors.success,
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
   }
 }
 

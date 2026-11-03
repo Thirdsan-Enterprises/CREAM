@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/api/repositories/sales_repository.dart';
+import '../../features/sales/sale_complete.dart';
 import '../formatters/currency_formatter.dart';
 import '../formatters/date_formatter.dart';
 import 'reason_dialog.dart';
@@ -152,6 +153,14 @@ class _SaleDetailSheetState extends ConsumerState<_SaleDetailSheet> {
               ),
               if (sale.customerName != null)
                 Text('Charged to ${sale.customerName}', style: muted),
+              if (!sale.isVoided) ...[
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () => offerReceipt(context, ref, sale.id),
+                  icon: const Icon(Icons.receipt_long),
+                  label: const Text('Receipt'),
+                ),
+              ],
               if (sale.isVoided) ...[
                 const SizedBox(height: 16),
                 Container(
@@ -168,7 +177,7 @@ class _SaleDetailSheetState extends ConsumerState<_SaleDetailSheet> {
                   ),
                 ),
               ] else if (widget.canVoid) ...[
-                const SizedBox(height: 20),
+                const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _void,
                   icon: const Icon(Icons.block),

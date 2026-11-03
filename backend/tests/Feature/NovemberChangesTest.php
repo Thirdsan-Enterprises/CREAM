@@ -203,4 +203,21 @@ class NovemberChangesTest extends TestCase
 
         $this->actingAs($this->cashier($this->town))->getJson('/api/purchases')->assertForbidden();
     }
+
+    public function test_a_receipt_shows_the_sale_and_only_to_its_branch(): void
+    {
+        $joy = $this->cashier($this->town);
+        $this->prepare($joy, ['Beef' => 5]);
+        $id = $this->sell($joy, ['Beef' => 2, 'Milk Tea' => 1], ['discount' => 1000, 'discount_note' => 'Regular'])->json('id');
+
+        $receipt = $this->actingAs($joy)->getJson("/api/sales/{$id}/receipt")->assertOk()->json();
+        $this->assertSame('Town', $receipt['store']['name']);
+        $this->assertSame($joy->name, $receipt['cashier']);
+        $this->assertEquals(23000, $receipt['subtotal']);
+        $this->assertEquals(22000, $receipt['total']);
+        $this->assertSame('Beef', $receipt['lines'][0]['name']);
+
+        $this->actingAs($this->cashier($this->lugogo))->getJson("/api/sales/{$id}/receipt")->assertForbidden();
+        $this->actingAs($this->owner)->getJson("/api/sales/{$id}/receipt")->assertOk();
+    }
 }

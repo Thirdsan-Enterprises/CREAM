@@ -263,3 +263,55 @@ class OperationsRepository {
 final operationsRepositoryProvider = Provider<OperationsRepository>(
   (ref) => OperationsRepository(ref.watch(apiClientProvider)),
 );
+
+/// What a customer receipt shows.
+class Receipt {
+  Receipt.fromJson(Map<String, dynamic> json)
+    : number = json['number'] as int,
+      soldAt = DateTime.parse(json['sold_at'] as String),
+      storeName = (json['store'] as Map)['name'] as String,
+      storeAddress = (json['store'] as Map)['address'] as String?,
+      storePhone = (json['store'] as Map)['phone'] as String?,
+      cashier = json['cashier'] as String?,
+      lines = [
+        for (final l in json['lines'] as List<dynamic>)
+          (
+            (l as Map)['name'] as String,
+            _n(l['qty']),
+            _n(l['unit_price']),
+            _n(l['total']),
+          ),
+      ],
+      subtotal = _n(json['subtotal']),
+      discount = _n(json['discount']),
+      discountNote = json['discount_note'] as String?,
+      total = _n(json['total']),
+      paymentMethod = json['payment_method'] as String,
+      customerName = (json['customer'] as Map?)?['name'] as String?,
+      customerBalance = ((json['customer'] as Map?)?['balance'] as num?)
+          ?.toDouble(),
+      voided = json['voided'] as bool? ?? false;
+
+  final int number;
+  final DateTime soldAt;
+  final String storeName;
+  final String? storeAddress;
+  final String? storePhone;
+  final String? cashier;
+
+  /// (name, qty, unit price, line total)
+  final List<(String, double, double, double)> lines;
+  final double subtotal;
+  final double discount;
+  final String? discountNote;
+  final double total;
+  final String paymentMethod;
+  final String? customerName;
+  final double? customerBalance;
+  final bool voided;
+}
+
+extension ReceiptApi on OperationsRepository {
+  Future<Receipt> receipt(int saleId) async =>
+      Receipt.fromJson(await _api.get('/sales/$saleId/receipt'));
+}
