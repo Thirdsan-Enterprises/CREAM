@@ -22,7 +22,12 @@ class ItemController extends Controller
         // The stock list: things bought and counted. Dishes made to order
         // (lunch, tea) live on the menu only; ?all=1 includes them.
         if (! $request->boolean('all')) {
-            $query->where('tracks_stock', true);
+            $query->where('tracks_stock', true)->where('daily_stock', false);
+            // Procurement's list: no menu items. Drinks (bought by each
+            // branch) are included only when asked for.
+            if (! $request->boolean('with_drinks')) {
+                $query->where('is_sellable', false);
+            }
         }
         // Removed items stay in history but leave the lists.
         if (! $request->boolean('include_removed') && ! $request->has('is_active')) {

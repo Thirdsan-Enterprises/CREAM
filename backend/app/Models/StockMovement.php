@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['item_id', 'store_id', 'type', 'qty', 'related_transfer_id', 'note', 'user_id', 'occurred_at'])]
+#[Fillable(['item_id', 'store_id', 'type', 'qty', 'unit_cost', 'supplier', 'related_transfer_id', 'note', 'user_id', 'occurred_at'])]
 class StockMovement extends Model
 {
     public const TYPE_PURCHASE = 'purchase';
@@ -18,6 +18,9 @@ class StockMovement extends Model
     public const TYPE_CONSUMPTION = 'consumption';
 
     public const TYPE_ADJUSTMENT = 'adjustment';
+
+    /** Plates of a dish prepared today (counted per day). */
+    public const TYPE_PREPARED = 'prepared';
 
     protected function casts(): array
     {

@@ -5,12 +5,16 @@ use App\Http\Controllers\BranchReportController;
 use App\Http\Controllers\CateringOrderController;
 use App\Http\Controllers\CateringPackageController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\DailyPlatesController;
+use App\Http\Controllers\DayReportController;
 use App\Http\Controllers\DrinkController;
 use App\Http\Controllers\EditLogController;
+use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\MenuController;
 use App\Http\Controllers\PlatePriceController;
 use App\Http\Controllers\PriceListController;
+use App\Http\Controllers\PurchaseLedgerController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\StockMovementController;
@@ -62,13 +66,20 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STORE_MANAGER)->group(function () {
         Route::get('/edit-logs', [EditLogController::class, 'index']);
-        Route::post('/sales/{sale}/void', [SaleController::class, 'void']);
         Route::patch('/customers/{customer}', [CustomerController::class, 'update']);
         Route::post('/customers/{customer}/adjustment', [CustomerController::class, 'adjust']);
     });
 
     Route::middleware('role:'.User::ROLE_ADMIN.','.User::ROLE_STORE_MANAGER.','.User::ROLE_CASHIER)->group(function () {
         Route::post('/sales', [SaleController::class, 'store']);
+        Route::get('/expenses', [ExpenseController::class, 'index']);
+        Route::post('/expenses', [ExpenseController::class, 'store']);
+        Route::post('/expenses/{expense}/void', [ExpenseController::class, 'void']);
+        Route::get('/reports/my-day', [DayReportController::class, 'show']);
+        Route::get('/daily-plates', [DailyPlatesController::class, 'index']);
+        Route::post('/daily-plates', [DailyPlatesController::class, 'store']);
+        // Cashiers: only their own sale, within minutes (checked in the controller).
+        Route::post('/sales/{sale}/void', [SaleController::class, 'void']);
 
         Route::get('/customers', [CustomerController::class, 'index']);
         Route::post('/customers', [CustomerController::class, 'store']);
@@ -113,6 +124,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/stock/purchase', [StockMovementController::class, 'purchase']);
         // Every branch's stock at a glance, for deciding what to send.
         Route::get('/reports/stock-status', [ReportController::class, 'stockStatus']);
+        Route::get('/purchases', [PurchaseLedgerController::class, 'index']);
         Route::post('/transfers', [StockTransferController::class, 'store']);
         Route::post('/transfers/{transfer}/confirm', [StockTransferController::class, 'confirm']);
     });

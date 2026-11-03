@@ -5,15 +5,29 @@ namespace App\Services;
 use App\Models\Item;
 use App\Models\ItemStoreSetting;
 use App\Models\StockMovement;
+use Carbon\CarbonImmutable;
 
 class StockService
 {
     public function balance(int $itemId, int $storeId): float
     {
-        return (float) StockMovement::query()
+        $query = StockMovement::query()
             ->where('item_id', $itemId)
-            ->where('store_id', $storeId)
-            ->sum('qty');
+            ->where('store_id', $storeId);
+
+        // A dish counted per day: only today's plates count; yesterday's
+        // left-overs are not on sale today.
+        if (Item::whereKey($itemId)->value('daily_stock')) {
+            $query->where('occurred_at', '>=', self::startOfToday());
+        }
+
+        return (float) $query->sum('qty');
+    }
+
+    /** Midnight in the business's time zone, as UTC. */
+    public static function startOfToday(): CarbonImmutable
+    {
+        return CarbonImmutable::now(config('app.business_timezone', 'Africa/Kampala'))->startOfDay()->utc();
     }
 
     public function balances(int $itemId): array
@@ -44,7 +58,8 @@ class StockService
         // Only what is counted on a shelf: kitchen stock and drinks, not
         // dishes made to order (lunch, tea).
         $settings = ItemStoreSetting::query()->where('store_id', $storeId)
-            ->whereHas('item', fn ($q) => $q->where('tracks_stock', true)->where('is_active', true))
+            // Plates counted per day are handled under Today's plates.
+            ->whereHas('item', fn ($q) => $q->where('tracks_stock', true)->where('daily_stock', false)->where('is_active', true))
             ->with('item')->get();
 
         $balances = StockMovement::query()

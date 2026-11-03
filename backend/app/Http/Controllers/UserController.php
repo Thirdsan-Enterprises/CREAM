@@ -29,6 +29,7 @@ class UserController extends Controller
             // Procurement staff are placed at the procurement unit.
             'store_id' => ['nullable', 'exists:stores,id', 'required_unless:role,'.User::ROLE_ADMIN.','.User::ROLE_STOREKEEPER],
             'is_active' => ['boolean'],
+            'can_record_expenses' => ['sometimes', 'boolean'],
         ]);
 
         $data['password'] = bcrypt($data['password']);
@@ -49,6 +50,7 @@ class UserController extends Controller
             ])],
             'store_id' => ['nullable', 'exists:stores,id'],
             'is_active' => ['sometimes', 'boolean'],
+            'can_record_expenses' => ['sometimes', 'boolean'],
         ]);
 
         if (isset($data['password'])) {

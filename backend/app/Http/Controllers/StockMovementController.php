@@ -71,9 +71,15 @@ class StockMovementController extends Controller
             'store_id' => ['nullable', 'exists:stores,id'],
             'item_id' => ['required', 'exists:items,id'],
             'qty' => ['required', 'numeric', 'gt:0'],
+            // What was paid, for the procurement ledger: per unit, or the
+            // total for the whole quantity.
+            'unit_cost' => ['nullable', 'numeric', 'min:0'],
+            'total_cost' => ['nullable', 'numeric', 'min:0'],
+            'supplier' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string'],
             'occurred_at' => ['nullable', 'date'],
         ]);
+        $unitCost = $data['unit_cost'] ?? (isset($data['total_cost']) ? round($data['total_cost'] / $data['qty'], 2) : null);
 
         $storeId = StoreScope::resolveRequired($user, $data['store_id'] ?? null);
         StoreScope::assertAccess($user, $storeId);
@@ -91,6 +97,8 @@ class StockMovementController extends Controller
             'store_id' => $storeId,
             'type' => StockMovement::TYPE_PURCHASE,
             'qty' => $data['qty'],
+            'unit_cost' => $unitCost,
+            'supplier' => isset($data['supplier']) ? trim($data['supplier']) : null,
             'note' => $data['note'] ?? null,
             'user_id' => $user->id,
             'occurred_at' => $data['occurred_at'] ?? now(),

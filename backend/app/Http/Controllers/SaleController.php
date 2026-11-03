@@ -11,6 +11,7 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\StockMovement;
 use App\Models\Store;
+use App\Models\User;
 use App\Services\CustomerStanding;
 use App\Services\LedgerService;
 use App\Services\PricingService;
@@ -71,7 +72,14 @@ class SaleController extends Controller
             'lines.*.item_type' => ['required', Rule::in([SaleItem::TYPE_PLATE, SaleItem::TYPE_DRINK, SaleItem::TYPE_ITEM])],
             'lines.*.item_id' => ['nullable', 'required_unless:lines.*.item_type,'.SaleItem::TYPE_PLATE, 'exists:items,id'],
             'lines.*.qty' => ['required', 'numeric', 'min:0'],
+            // A discount off the whole sale, always with a note saying why.
+            'discount' => ['nullable', 'numeric', 'min:0'],
+            'discount_note' => ['nullable', 'string', 'max:255'],
         ]);
+        $discount = round((float) ($data['discount'] ?? 0), 2);
+        if ($discount > 0 && trim((string) ($data['discount_note'] ?? '')) === '') {
+            throw ValidationException::withMessages(['discount_note' => ['Say why there is a discount.']]);
+        }
 
         // A customer can buy a drink or an egg without a plate. The Sell
         // screen sends "0 plates" in that case, so lines with nothing on them
@@ -108,7 +116,7 @@ class SaleController extends Controller
             }
         }
 
-        $sale = DB::transaction(function () use ($data, $storeId, $user, $customer) {
+        $sale = DB::transaction(function () use ($data, $storeId, $user, $customer, $discount) {
             $this->assertItemsInStock($data['lines'], $storeId);
 
             $lineInputs = [];
@@ -160,12 +168,18 @@ class SaleController extends Controller
                 ];
             }
 
+            if ($discount >= $total) {
+                throw ValidationException::withMessages(['discount' => ['The discount must be less than the sale ('.number_format($total).').']]);
+            }
+
             $sale = Sale::create([
                 'store_id' => $storeId,
                 'sold_by' => $user->id,
                 'payment_method' => $data['payment_method'],
                 'customer_id' => $customer?->id,
-                'total' => $total,
+                'total' => $total - $discount,
+                'discount' => $discount,
+                'discount_note' => $discount > 0 ? trim($data['discount_note']) : null,
                 'sold_at' => now(),
             ]);
 
@@ -215,10 +229,23 @@ class SaleController extends Controller
      * shelf and an account charge is credited back, in one transaction.
      * The owner can void any sale, a store manager only at their branch.
      */
+    /** How long a cashier may still cancel a sale they made. */
+    public const CASHIER_CANCEL_MINUTES = 15;
+
     public function void(Request $request, Sale $sale)
     {
         $user = $request->user();
         StoreScope::assertAccess($user, $sale->store_id);
+        // A cashier may cancel their own sale shortly after making it (a
+        // mistake, or the customer changed their mind); after that, or for
+        // someone else's sale, the manager or owner does it.
+        if ($user->role === User::ROLE_CASHIER) {
+            $recent = $sale->sold_by === $user->id
+                && $sale->sold_at->gt(now()->subMinutes(self::CASHIER_CANCEL_MINUTES));
+            if (! $recent) {
+                abort(403, 'Only a sale you made in the last '.self::CASHIER_CANCEL_MINUTES.' minutes can be cancelled. Ask your manager.');
+            }
+        }
 
         $data = $request->validate([
             'reason' => ['required', 'string', 'max:500'],
@@ -315,6 +342,14 @@ class SaleController extends Controller
                     'lines' => ["{$item->name} is not on the menu."],
                 ]);
             }
+            $offMenu = ItemStoreSetting::where('item_id', $item->id)->where('store_id', $storeId)
+                ->where('on_menu', false)->exists();
+            if ($offMenu) {
+                $branch = Store::find($storeId)?->name;
+                throw ValidationException::withMessages([
+                    'lines' => ["{$item->name} is not on the menu at {$branch}."],
+                ]);
+            }
         }
         $tracked = $items->where('tracks_stock', true)->pluck('id')->all();
         $wanted = array_intersect_key($wanted, array_flip($tracked));
@@ -331,9 +366,12 @@ class SaleController extends Controller
                 $item = Item::find($itemId);
                 $left = max($available, 0);
                 $branch = Store::find($storeId)?->name;
-                throw ValidationException::withMessages([
-                    'lines' => ["Only {$left} {$item?->name} in stock at {$branch}: cannot sell {$qty}. Record the purchase first."],
-                ]);
+                $message = $item?->daily_stock
+                    ? ($left <= 0
+                        ? "No {$item->name} plates left today at {$branch}. Add today's plates first."
+                        : "Only {$left} {$item->name} plates left today at {$branch}: cannot sell {$qty}.")
+                    : "Only {$left} {$item?->name} in stock at {$branch}: cannot sell {$qty}. Record the purchase first.";
+                throw ValidationException::withMessages(['lines' => [$message]]);
             }
         }
     }
@@ -387,7 +425,9 @@ class SaleController extends Controller
         return response()->json([
             'store_id' => $storeId,
             'sales_count' => $sales->count(),
-            'total_revenue' => $plateRevenue + $drinkRevenue + $itemRevenue,
+            // What was taken: everything sold less discounts given.
+            'total_revenue' => $plateRevenue + $drinkRevenue + $itemRevenue - (float) $sales->sum('discount'),
+            'discounts' => (float) $sales->sum('discount'),
             'plate_revenue' => $plateRevenue,
             'drink_revenue' => $drinkRevenue,
             // Everything sold on its own that is not a drink: eggs, tea...

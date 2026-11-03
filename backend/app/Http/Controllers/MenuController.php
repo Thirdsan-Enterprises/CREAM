@@ -49,6 +49,7 @@ class MenuController extends Controller
             'category' => $item->sell_category ?? ($item->is_drink ? 'Drinks' : 'Other'),
             'price' => $this->pricingService->currentItemPrice($item->id, $storeId),
             'tracks_stock' => (bool) $item->tracks_stock,
+            'daily_stock' => (bool) $item->daily_stock,
             'balance' => $storeId && $item->tracks_stock
                 ? $this->stockService->balance($item->id, $storeId)
                 : null,
@@ -96,6 +97,7 @@ class MenuController extends Controller
             'price' => ['required', 'numeric', 'gt:0'],
             'store_id' => ['nullable', 'exists:stores,id'],
             'tracks_stock' => ['sometimes', 'boolean'],
+            'daily_stock' => ['sometimes', 'boolean'],
             'safety_stock' => ['nullable', 'numeric', 'min:0'],
             'branches' => ['nullable', 'array'],
             'branches.*' => ['integer', 'exists:stores,id'],
@@ -106,7 +108,9 @@ class MenuController extends Controller
             $attributes = [
                 'is_sellable' => true,
                 'sell_category' => $category,
-                'tracks_stock' => $data['tracks_stock'] ?? true,
+                // Counted per day (plates) implies counted.
+                'daily_stock' => $data['daily_stock'] ?? false,
+                'tracks_stock' => ($data['daily_stock'] ?? false) || ($data['tracks_stock'] ?? true),
                 // A drink is bought by each branch itself; other items come
                 // from the procurement unit.
                 'is_drink' => strcasecmp($category, 'Drinks') === 0,
@@ -149,6 +153,7 @@ class MenuController extends Controller
             'unit' => ['sometimes', 'string', 'max:50'],
             'category' => ['sometimes', 'string', 'max:50'],
             'tracks_stock' => ['sometimes', 'boolean'],
+            'daily_stock' => ['sometimes', 'boolean'],
             'is_active' => ['sometimes', 'boolean'],
             'price' => ['sometimes', 'numeric', 'gt:0'],
             'store_id' => ['nullable', 'exists:stores,id'],
@@ -172,12 +177,16 @@ class MenuController extends Controller
                 'unit' => $item->unit,
                 'category' => $item->sell_category,
                 'tracks_stock' => (bool) $item->tracks_stock,
+                'daily_stock' => (bool) $item->daily_stock,
                 'is_active' => (bool) $item->is_active,
                 'price' => $this->pricingService->currentItemPrice($item->id, $storeId),
                 'sold_at' => $this->soldAt($item),
             ];
 
-            $fields = array_intersect_key($data, array_flip(['name', 'unit', 'tracks_stock', 'is_active']));
+            $fields = array_intersect_key($data, array_flip(['name', 'unit', 'tracks_stock', 'daily_stock', 'is_active']));
+            if (! empty($fields['daily_stock'])) {
+                $fields['tracks_stock'] = true;
+            }
             if (isset($data['category'])) {
                 $fields['sell_category'] = trim($data['category']);
                 $fields['is_drink'] = strcasecmp($fields['sell_category'], 'Drinks') === 0;
@@ -201,6 +210,7 @@ class MenuController extends Controller
                 'unit' => $item->unit,
                 'category' => $item->sell_category,
                 'tracks_stock' => (bool) $item->tracks_stock,
+                'daily_stock' => (bool) $item->daily_stock,
                 'is_active' => (bool) $item->is_active,
                 'price' => $this->pricingService->currentItemPrice($item->id, $storeId),
                 'sold_at' => $this->soldAt($item),

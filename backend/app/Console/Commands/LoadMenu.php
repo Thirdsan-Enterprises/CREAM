@@ -24,6 +24,15 @@ class LoadMenu extends Command
 
     protected $description = 'Load the Town/Kira breakfast and lunch menu';
 
+    /** Every lunch at Kira is this price (a Kira price on each dish). */
+    public const KIRA_LUNCH_PRICE = 25000;
+
+    /** Lugogo's own two lunches, sold only there. Rename and reprice in the app. */
+    public const LUGOGO_LUNCH = [
+        ['Full plate', 15000],
+        ['Small plate', 10000],
+    ];
+
     /** [heading, name, unit, price, counted on a shelf] */
     public const MENU = [
         ['Lunch', 'Beef', 'plate', 10000, false],
@@ -85,7 +94,9 @@ class LoadMenu extends Command
                         'unit' => $unit,
                         'is_active' => true,
                         'is_drink' => $heading === 'Drinks',
-                        'tracks_stock' => $counted,
+                        // Lunch is plates counted per day (Today's plates).
+                        'tracks_stock' => $counted || $heading === 'Lunch',
+                        'daily_stock' => $heading === 'Lunch',
                     ]);
                 $isNew = $item->wasRecentlyCreated;
                 $item->update([
@@ -103,25 +114,59 @@ class LoadMenu extends Command
                 ItemStoreSetting::where('item_id', $item->id)->whereIn('store_id', $branches->pluck('id'))->update(['on_menu' => true]);
 
                 foreach ($branches as $branch) {
-                    $current = DrinkPrice::where('item_id', $item->id)->where('store_id', $branch->id)->where('is_active', true)->first();
-                    if ($current && ! $this->option('update-prices')) {
-                        continue;
-                    }
-                    DrinkPrice::where('item_id', $item->id)->where('store_id', $branch->id)->where('is_active', true)->update(['is_active' => false]);
-                    DrinkPrice::create([
-                        'item_id' => $item->id,
-                        'store_id' => $branch->id,
-                        'price' => $price,
-                        'effective_from' => now()->toDateString(),
-                        'is_active' => true,
-                    ]);
+                    $branchPrice = strtoupper($branch->code) === 'KIRA' && $heading === 'Lunch'
+                        ? self::KIRA_LUNCH_PRICE
+                        : $price;
+                    $this->setBranchPrice($item, $branch->id, $branchPrice);
                 }
                 $this->line(sprintf('  %-10s %-20s UGX %s', $heading, $name, number_format($price)));
+
             }
+
+            $this->loadLugogo();
         });
 
-        $this->info(count(self::MENU).' menu items loaded for '.$branches->pluck('name')->join(' and ').'.');
+        $this->info(count(self::MENU).' menu items loaded for '.$branches->pluck('name')->join(' and ').' (lunch at Kira UGX '.number_format(self::KIRA_LUNCH_PRICE).').');
 
         return self::SUCCESS;
+    }
+
+    /** A branch's own price, unless one is set already (or --update-prices). */
+    private function setBranchPrice(Item $item, int $storeId, float $price): void
+    {
+        $current = DrinkPrice::where('item_id', $item->id)->where('store_id', $storeId)->where('is_active', true)->first();
+        if ($current && ((float) $current->price === $price || ! $this->option('update-prices'))) {
+            return;
+        }
+        DrinkPrice::where('item_id', $item->id)->where('store_id', $storeId)->where('is_active', true)->update(['is_active' => false]);
+        DrinkPrice::create([
+            'item_id' => $item->id,
+            'store_id' => $storeId,
+            'price' => $price,
+            'effective_from' => now()->toDateString(),
+            'is_active' => true,
+        ]);
+    }
+
+    /** Lugogo's two lunches, only at Lugogo. */
+    private function loadLugogo(): void
+    {
+        $lugogo = Store::where(DB::raw('UPPER(code)'), 'LUGOGO')->first();
+        if (! $lugogo) {
+            return;
+        }
+        foreach (self::LUGOGO_LUNCH as [$name, $price]) {
+            $item = Item::where('name', $name)->where('is_sellable', true)->first();
+            if (! $item) {
+                $item = Item::create([
+                    'name' => $name, 'unit' => 'plate', 'is_active' => true, 'is_drink' => false,
+                    'is_sellable' => true, 'sell_category' => 'Lunch', 'tracks_stock' => true, 'daily_stock' => true,
+                ]);
+                ItemStoreSetting::backfillForItem($item);
+                ItemStoreSetting::where('item_id', $item->id)->where('store_id', '!=', $lugogo->id)->update(['on_menu' => false]);
+            }
+            $this->setBranchPrice($item, $lugogo->id, $price);
+            $this->line(sprintf('  %-10s %-20s UGX %s (Lugogo)', 'Lunch', $name, number_format($price)));
+        }
     }
 }

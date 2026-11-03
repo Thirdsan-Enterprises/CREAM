@@ -11,7 +11,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'phone', 'email', 'password', 'role', 'store_id', 'is_active'])]
+#[Fillable(['name', 'phone', 'email', 'password', 'role', 'can_record_expenses', 'store_id', 'is_active'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -32,12 +32,19 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'can_record_expenses' => 'boolean',
         ];
     }
 
     public function store(): BelongsTo
     {
         return $this->belongsTo(Store::class);
+    }
+
+    /** Managers and the owner always; anyone else the owner allows. */
+    public function canRecordExpenses(): bool
+    {
+        return $this->isAdmin() || $this->role === self::ROLE_STORE_MANAGER || (bool) $this->can_record_expenses;
     }
 
     public function isAdmin(): bool

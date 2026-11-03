@@ -71,6 +71,10 @@ class BranchMenuTest extends TestCase
     {
         $cashier = $this->cashierAt($this->town);
         $town = $this->menu($cashier);
+        $this->actingAs($cashier)->postJson('/api/daily-plates', ['items' => [
+            ['item_id' => $town['Beef']['item']['id'], 'qty' => 40],
+            ['item_id' => $town['Fish']['item']['id'], 'qty' => 20],
+        ]])->assertOk();
         $sale = $this->actingAs($cashier)->postJson('/api/sales', ['payment_method' => 'cash', 'lines' => [
             ['item_type' => 'item', 'item_id' => $town['Beef']['item']['id'], 'qty' => 2],
             ['item_type' => 'item', 'item_id' => $town['Fish']['item']['id'], 'qty' => 1],
