@@ -62,7 +62,9 @@ class BranchMenuTest extends TestCase
         $this->assertTrue($this->menu($this->cashierAt($this->kira))->has('Beef'));
 
         $lugogo = $this->menu($this->cashierAt($this->lugogo));
-        $this->assertFalse($lugogo->has('Beef'));
+        $this->assertEquals(15000, $lugogo['Beef']['price'], "Lugogo's own Beef");
+        $this->assertNotEquals($town['Beef']['item']['id'], $lugogo['Beef']['item']['id']);
+        $this->assertFalse($lugogo->has('Fish'));
         $this->assertFalse($lugogo->has('Milk Tea'));
         $this->assertEquals(2000, $lugogo['Water']['price'], 'Lugogo keeps its drink prices');
     }

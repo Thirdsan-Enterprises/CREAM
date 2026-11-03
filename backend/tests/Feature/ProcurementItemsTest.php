@@ -92,4 +92,16 @@ class ProcurementItemsTest extends TestCase
         $tea = Item::where('name', 'Milk Tea')->firstOrFail();
         $this->actingAs($this->procurement)->deleteJson("/api/items/{$tea->id}", ['reason' => 'x'])->assertUnprocessable();
     }
+
+    public function test_mineral_water_is_the_water_drink_not_a_kitchen_item(): void
+    {
+        Item::create(['name' => 'Mineral water', 'unit' => 'bottle', 'category' => 'Food',
+            'is_drink' => false, 'is_sellable' => false, 'tracks_stock' => true, 'is_active' => true]);
+        $this->artisan('cream:load-procurement-items')->assertSuccessful();
+
+        $this->assertFalse($this->list()->has('Mineral water'));
+        $this->assertDatabaseMissing('items', ['name' => 'Mineral water']);
+        $withDrinks = collect($this->actingAs($this->procurement)->getJson('/api/items?with_drinks=1')->json('data'))->keyBy('name');
+        $this->assertTrue($withDrinks['Water']['is_drink'], 'procurement buys bottled water as the Water drink');
+    }
 }

@@ -59,8 +59,15 @@ php artisan cream:load-menu
 
 - It puts the dishes on the menu at **Town** and **Kira**, at the prices in
   the document, except that **every lunch at Kira is UGX 25,000**.
-- **Lugogo** gets its own two lunches: *Full plate* (15,000) and *Small plate*
-  (10,000). Rename or reprice them in Settings > Prices & menu.
+- **Lugogo** gets its own two lunches: *Beef* (15,000) and *Beans*
+  (10,000), kept apart from Town and Kira's dishes. Add more, rename or
+  reprice them in Settings > Prices & menu (tick only Lugogo under *Sold at*).
+  If an earlier load named them *Full plate* / *Small plate*, running the
+  command again renames them; once Lugogo has its own lunches the command
+  leaves them as the owner set them.
+- **Silver plate** (the aluminium plate food is packed in to take away) is
+  under its own *Takeaway* heading at every branch, UGX 500. Ring it up
+  with the food when a customer asks for packing.
 - Lunch dishes are **counted per day**: each morning the branch taps *Plates*
   on the Sell screen and types how many of each dish were made.
 - Water and Soda are set to UGX 1,500 at Town and Kira; other branches keep
@@ -82,3 +89,12 @@ php artisan cream:load-procurement-items
 Safe to run again. After that, procurement and the owner add, rename or
 remove items in the app (Stocking > Items, or Settings > Kitchen stock).
 Run it after `cream:load-menu`.
+
+*Mineral water* is not on the list: it is the bottled **Water** drink. Each
+branch buys it as a drink (Stocking > Purchase lists drinks too) and sells it
+from the Drinks heading. An older *Mineral water* kitchen item is deleted, or
+hidden if it already has history.
+
+Store managers see their branch's kitchen stock (Stock > Balances) and
+confirm what procurement sends; only procurement and the owner add or remove
+kitchen items.

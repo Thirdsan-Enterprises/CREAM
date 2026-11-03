@@ -65,7 +65,8 @@ class MenuController extends Controller
             'lunch' => 0,
             'breakfast' => 1,
             'drinks' => 2,
-            default => 3,
+            'takeaway' => 3,
+            default => 4,
         };
     }
 

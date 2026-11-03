@@ -313,6 +313,7 @@ class _PricesTabState extends ConsumerState<PricesTab> {
           'Lunch',
           'Breakfast',
           'Drinks',
+          'Takeaway',
           'Snacks',
           ...groups.keys,
         }.toList();

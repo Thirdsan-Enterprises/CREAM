@@ -68,23 +68,58 @@ class NovemberChangesTest extends TestCase
     public function test_lugogo_has_its_two_lunches_and_kira_lunch_is_25000(): void
     {
         $lugogo = $this->menu($this->cashier($this->lugogo));
-        $this->assertEquals(15000, $lugogo['Full plate']['price']);
-        $this->assertEquals(10000, $lugogo['Small plate']['price']);
-        $this->assertFalse($lugogo->has('Beef'));
+        $this->assertEquals(15000, $lugogo['Beef']['price']);
+        $this->assertEquals(10000, $lugogo['Beans']['price']);
+        $this->assertFalse($lugogo->has('Fish'));
+        $this->assertNotEquals($lugogo['Beef']['item']['id'], $this->menu($this->cashier($this->town))['Beef']['item']['id'],
+            "Lugogo's Beef is its own dish");
 
         $kira = $this->menu($this->cashier($this->kira));
         $this->assertEquals(25000, $kira['Beef']['price']);
         $this->assertEquals(25000, $kira['Peas']['price']);
         $this->assertEquals(3000, $kira['Milk Tea']['price'], 'breakfast is the Town price');
         $this->assertEquals(10000, $this->menu($this->cashier($this->town))['Beef']['price']);
-        $this->assertFalse($this->menu($this->cashier($this->town))->has('Full plate'));
+        $this->assertFalse($this->menu($this->cashier($this->town))->has('Beans'));
 
         // The owner renames and reprices a Lugogo lunch.
-        $id = $lugogo['Full plate']['item']['id'];
+        $id = $lugogo['Beef']['item']['id'];
         $this->actingAs($this->owner)->patchJson("/api/menu-items/{$id}", [
             'name' => 'Matooke & beef', 'price' => 16000, 'store_id' => $this->lugogo->id, 'reason' => 'Lugogo menu names',
         ])->assertOk();
         $this->assertEquals(16000, $this->menu($this->cashier($this->lugogo))['Matooke & beef']['price']);
+        $this->assertEquals(10000, $this->menu($this->cashier($this->town))['Beef']['price'], 'Town keeps its Beef');
+
+        // The owner adds another Lugogo lunch.
+        $this->actingAs($this->owner)->postJson('/api/menu-items', [
+            'name' => 'Chicken', 'category' => 'Lunch', 'price' => 18000, 'daily_stock' => true,
+            'store_id' => $this->lugogo->id, 'branches' => [$this->lugogo->id],
+        ])->assertCreated();
+        $this->assertEquals(18000, $this->menu($this->cashier($this->lugogo))['Chicken']['price']);
+
+        // Running the loader again changes nothing.
+        $this->artisan('cream:load-menu')->assertSuccessful();
+        $lugogo = $this->menu($this->cashier($this->lugogo));
+        $this->assertTrue($lugogo->has('Matooke & beef'));
+        $this->assertTrue($lugogo->has('Beans'));
+        $this->assertFalse($lugogo->has('Beef'), 'the renamed dish is not put back');
+        $this->assertSame(1, \App\Models\Item::where('name', 'Beef')->count());
+    }
+
+    public function test_earlier_lugogo_names_are_renamed_and_silver_plate_is_a_takeaway_charge_everywhere(): void
+    {
+        // As an earlier load left it.
+        $full = $this->menu($this->cashier($this->lugogo))['Beef']['item']['id'];
+        \App\Models\Item::whereKey($full)->update(['name' => 'Full plate']);
+        $this->artisan('cream:load-menu')->assertSuccessful();
+        $lugogo = $this->menu($this->cashier($this->lugogo));
+        $this->assertSame($full, $lugogo['Beef']['item']['id']);
+        $this->assertFalse($lugogo->has('Full plate'));
+
+        foreach ([$this->lugogo, $this->town, $this->kira] as $store) {
+            $silver = $this->menu($this->cashier($store))['Silver plate'];
+            $this->assertSame('Takeaway', $silver['category']);
+            $this->assertEquals(500, $silver['price']);
+        }
     }
 
     public function test_plates_are_prepared_each_morning_and_sell_down(): void

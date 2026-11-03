@@ -37,7 +37,6 @@ class LoadProcurementItems extends Command
         ['Food', 'Sweet potatoes', 'kg', ['Sweet Potatoes']],
         ['Food', 'Irish potatoes', 'kg', ['Irish']],
         ['Food', 'Cassava', 'kg', []],
-        ['Food', 'Mineral water', 'bottle', []],
 
         ['Spices & seasoning', 'Aromat', 'packet', []],
         ['Spices & seasoning', 'Royco', 'packet', []],
@@ -69,6 +68,12 @@ class LoadProcurementItems extends Command
         'Matooke' => 'Food', 'Karo' => 'Food', 'Rice' => 'Food', 'Posho' => 'Food', 'Pumpkin' => 'Food',
     ];
 
+    /**
+     * Items that turned out to be something else: mineral water is the
+     * bottled Water drink, which each branch buys and sells itself.
+     */
+    public const RETIRED = ['Mineral water'];
+
     public function handle(): int
     {
         $added = 0;
@@ -87,6 +92,12 @@ class LoadProcurementItems extends Command
                     $added++;
                 }
                 ItemStoreSetting::backfillForItem($item);
+            }
+            foreach (Item::where('is_sellable', false)->where('is_drink', false)->whereIn('name', self::RETIRED)->get() as $item) {
+                $used = DB::table('stock_movements')->where('item_id', $item->id)->exists()
+                    || DB::table('stock_transfer_items')->where('item_id', $item->id)->exists()
+                    || DB::table('stock_request_items')->where('item_id', $item->id)->exists();
+                $used ? $item->update(['is_active' => false]) : $item->delete();
             }
             foreach (self::EXISTING as $name => $category) {
                 Item::where('name', $name)->where('is_sellable', false)->whereNull('category')->update(['category' => $category]);

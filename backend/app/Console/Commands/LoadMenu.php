@@ -27,10 +27,19 @@ class LoadMenu extends Command
     /** Every lunch at Kira is this price (a Kira price on each dish). */
     public const KIRA_LUNCH_PRICE = 25000;
 
-    /** Lugogo's own two lunches, sold only there. Rename and reprice in the app. */
+    /**
+     * Lugogo's own lunches, sold only there: [name, price, earlier name].
+     * Kept apart from Town/Kira's Beef so the owner can rename or reprice
+     * Lugogo's without touching the other branches.
+     */
     public const LUGOGO_LUNCH = [
-        ['Full plate', 15000],
-        ['Small plate', 10000],
+        ['Beef', 15000, 'Full plate'],
+        ['Beans', 10000, 'Small plate'],
+    ];
+
+    /** Charged on top when food is packed to take away, at every branch. */
+    public const EVERY_BRANCH = [
+        ['Takeaway', 'Silver plate', 500],
     ];
 
     /** [heading, name, unit, price, counted on a shelf] */
@@ -63,7 +72,7 @@ class LoadMenu extends Command
         ['Breakfast', 'Sausage', 'piece', 1500, false],
         ['Breakfast', 'Omelette', 'plate', 3000, false],
         ['Breakfast', 'Pancake', 'piece', 500, false],
-        ['Breakfast', 'Silver plate', 'piece', 500, false],
+        ['Takeaway', 'Silver plate', 'piece', 500, false],
 
         ['Drinks', 'Minute Maid', 'bottle', 3000, true],
         ['Drinks', 'Water', 'bottle', 1500, true],
@@ -88,6 +97,8 @@ class LoadMenu extends Command
                 // dish, not the kilos of cassava procurement buys.
                 $item = Item::where('name', $name)
                     ->where(fn ($q) => $q->where('is_sellable', true)->orWhere('is_drink', true))
+                    ->whereNotIn('id', $this->lugogoOwnIds())
+                    ->orderBy('id')
                     ->first()
                     ?? Item::create([
                         'name' => $name,
@@ -124,6 +135,7 @@ class LoadMenu extends Command
             }
 
             $this->loadLugogo();
+            $this->loadEveryBranch();
         });
 
         $this->info(count(self::MENU).' menu items loaded for '.$branches->pluck('name')->join(' and ').' (lunch at Kira UGX '.number_format(self::KIRA_LUNCH_PRICE).').');
@@ -148,25 +160,71 @@ class LoadMenu extends Command
         ]);
     }
 
-    /** Lugogo's two lunches, only at Lugogo. */
+    private ?Store $lugogo = null;
+
+    private function lugogo(): ?Store
+    {
+        return $this->lugogo ??= Store::where(DB::raw('UPPER(code)'), 'LUGOGO')->first();
+    }
+
+    /** Menu items sold at Lugogo and nowhere else. */
+    private function lugogoOwnIds(): array
+    {
+        $lugogo = $this->lugogo();
+        if (! $lugogo) {
+            return [];
+        }
+
+        return ItemStoreSetting::where('on_menu', true)->get()
+            ->groupBy('item_id')
+            ->filter(fn ($rows) => $rows->pluck('store_id')->all() === [$lugogo->id])
+            ->keys()->all();
+    }
+
+    /** Lugogo's lunches, only at Lugogo. */
     private function loadLugogo(): void
     {
-        $lugogo = Store::where(DB::raw('UPPER(code)'), 'LUGOGO')->first();
+        $lugogo = $this->lugogo();
         if (! $lugogo) {
             return;
         }
-        foreach (self::LUGOGO_LUNCH as [$name, $price]) {
-            $item = Item::where('name', $name)->where('is_sellable', true)->first();
-            if (! $item) {
+        $own = Item::where('is_sellable', true)->whereIn('id', $this->lugogoOwnIds());
+        // Once Lugogo has lunches of its own the owner manages them in the
+        // app; only the names of an earlier load are brought up to date.
+        $fresh = ! (clone $own)->where('sell_category', 'Lunch')->exists();
+        foreach (self::LUGOGO_LUNCH as [$name, $price, $earlier]) {
+            $item = (clone $own)->where('name', $earlier)->first();
+            if ($item && ! (clone $own)->where('name', $name)->exists()) {
+                $item->update(['name' => $name]);
+            } elseif ($fresh) {
                 $item = Item::create([
                     'name' => $name, 'unit' => 'plate', 'is_active' => true, 'is_drink' => false,
                     'is_sellable' => true, 'sell_category' => 'Lunch', 'tracks_stock' => true, 'daily_stock' => true,
                 ]);
                 ItemStoreSetting::backfillForItem($item);
                 ItemStoreSetting::where('item_id', $item->id)->where('store_id', '!=', $lugogo->id)->update(['on_menu' => false]);
+                ItemStoreSetting::where('item_id', $item->id)->where('store_id', $lugogo->id)->update(['on_menu' => true]);
+            } else {
+                continue;
             }
             $this->setBranchPrice($item, $lugogo->id, $price);
             $this->line(sprintf('  %-10s %-20s UGX %s (Lugogo)', 'Lunch', $name, number_format($price)));
+        }
+    }
+
+    /** Things like the takeaway silver plate, sold at every branch. */
+    private function loadEveryBranch(): void
+    {
+        foreach (self::EVERY_BRANCH as [$heading, $name, $price]) {
+            $item = Item::where('name', $name)->where('is_sellable', true)->orderBy('id')->first();
+            if (! $item) {
+                continue;
+            }
+            $item->update(['sell_category' => $heading]);
+            foreach (Store::where('is_active', true)->get() as $store) {
+                ItemStoreSetting::where('item_id', $item->id)->where('store_id', $store->id)->update(['on_menu' => true]);
+                $this->setBranchPrice($item, $store->id, $price);
+            }
         }
     }
 }
