@@ -16,6 +16,9 @@ class CustomerStanding
 {
     public const WARN_AT_PCT = 80;
 
+    /** Warn when an LPO has this many plates left or fewer. */
+    public const LPO_PLATES_WARNING = 5;
+
     public function __construct(private readonly PricingService $pricingService) {}
 
     /**
@@ -41,12 +44,33 @@ class CustomerStanding
             $status = 'low';
         }
 
+        $warning = $this->warning($customer, $status, $available, $usedPct, $limit);
+
+        // An LPO also runs out of plates; say so before it does.
+        $lpo = null;
+        if ($customer->account_type === Customer::TYPE_LPO) {
+            $current = $customer->currentLpo();
+            $lpo = $current?->summary();
+            $label = 'LPO '.($current?->number ?: '#'.$current?->id);
+            if ($current === null) {
+                $status = 'blocked';
+                $warning = "{$customer->name} has no LPO yet. Record the LPO first.";
+            } elseif ($lpo['plates_left'] !== null && $lpo['plates_left'] <= 0) {
+                $status = 'blocked';
+                $warning = "{$label} has no plates left (all {$lpo['plates']} used). Ask {$customer->name} for a new LPO.";
+            } elseif ($lpo['plates_left'] !== null && $lpo['plates_left'] <= self::LPO_PLATES_WARNING && $status === 'ok') {
+                $status = 'low';
+                $warning = "{$label} has only {$lpo['plates_left']} plates left.";
+            }
+        }
+
         return [
             'balance' => $balance,
             'available' => max(0, $available),
             'credit_used_pct' => $usedPct,
             'status' => $status,
-            'warning' => $this->warning($customer, $status, $available, $usedPct, $limit),
+            'warning' => $warning,
+            'lpo' => $lpo,
         ];
     }
 

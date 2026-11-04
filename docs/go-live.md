@@ -116,3 +116,21 @@ hidden if it already has history.
 Store managers see their branch's kitchen stock (Stock > Balances) and
 confirm what procurement sends; only procurement and the owner add or remove
 kitchen items.
+
+# Customer accounts and LPOs
+
+Opening an account asks for its money up front:
+
+- **Prepaid:** the amount paid now and how (cash, MoMo, Airtel, bank). Each
+  meal comes off it.
+- **Credit:** the owner sets the credit limit.
+- **LPO** (a company whose staff eat on a purchase order): the LPO number,
+  its amount, how many lunch plates it pays for (optional) and what it
+  covers (Lunch, Breakfast, Drinks).
+
+Selling on an LPO: choose **LPO** under *Paid by*, then the company. The
+sale is refused if the LPO does not cover something in the order (take
+payment for that separately), if its plates are used up, or if its amount
+is used up. Packing for takeaway is always allowed. When the company sends
+its next LPO, open the account and tap **New LPO**; what was left on the
+account carries on.

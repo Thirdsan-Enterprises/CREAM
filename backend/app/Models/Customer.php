@@ -52,6 +52,17 @@ class Customer extends Model
         return $this->hasMany(LedgerEntry::class);
     }
 
+    public function lpos(): HasMany
+    {
+        return $this->hasMany(CustomerLpo::class);
+    }
+
+    /** The LPO sales are charged to now: the latest one. */
+    public function currentLpo(): ?CustomerLpo
+    {
+        return $this->lpos()->latest('id')->first();
+    }
+
     public function balance(): float
     {
         return (float) $this->ledgerEntries()->sum('amount');

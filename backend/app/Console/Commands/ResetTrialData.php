@@ -60,6 +60,8 @@ class ResetTrialData extends Command
             DB::table('sale_items')->delete();
             DB::table('ledger_entries')->delete();
             DB::table('sales')->delete();
+            // LPOs brought during the trial; their value was in the ledger.
+            DB::table('customer_lpos')->delete();
 
             DB::table('expenses')->delete();
 
@@ -97,6 +99,7 @@ class ResetTrialData extends Command
         $plan = [
             'Sales (and their lines)' => DB::table('sales')->count(),
             'Account ledger entries' => DB::table('ledger_entries')->count(),
+            'LPOs recorded' => DB::table('customer_lpos')->count(),
             'Stock movements (balances reset to 0)' => DB::table('stock_movements')->count(),
             'Stock transfers' => DB::table('stock_transfers')->count(),
             'Branch stock requests' => DB::table('stock_requests')->count(),

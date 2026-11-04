@@ -113,50 +113,91 @@ class SaleTest extends TestCase
         $this->assertEquals(-25000, $customer->fresh()->balance());
     }
 
-    public function test_lpo_customer_account_behaves_like_prepaid_floored_at_zero(): void
+    private function lpoCustomer(User $by, array $lpo): Customer
     {
-        // LPO is a third account type funded by a purchase order instead of
-        // cash, but it shares the exact same balance mechanics as prepaid —
-        // top up, draw down per sale, reject once it would go negative.
-        $this->seedPlatePrice();
-        $store = Store::factory()->create();
-        $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
-        $customer = Customer::factory()->lpo()->create();
+        $id = $this->actingAs($by)->postJson('/api/customers', [
+            'name' => 'Acme Ltd', 'phone' => '07'.random_int(10000000, 99999999), 'account_type' => 'lpo', 'lpo' => $lpo,
+        ])->assertCreated()->json('id');
 
-        $this->actingAs($cashier)->postJson("/api/customers/{$customer->id}/deposit", [
-            'amount' => 25000,
-            'note' => 'LPO-2026-0042',
-        ])->assertCreated();
-
-        $this->actingAs($cashier)->postJson('/api/sales', [
-            'payment_method' => 'account',
-            'customer_id' => $customer->id,
-            'lines' => [['item_type' => 'plate', 'qty' => 1]],
-        ])->assertCreated();
-        $this->assertEquals(0, $customer->fresh()->balance());
-
-        $response = $this->actingAs($cashier)->postJson('/api/sales', [
-            'payment_method' => 'account',
-            'customer_id' => $customer->id,
-            'lines' => [['item_type' => 'plate', 'qty' => 1]],
-        ]);
-        $response->assertStatus(422);
-        $response->assertJsonFragment(['This customer does not have sufficient LPO balance remaining.']);
+        return Customer::findOrFail($id);
     }
 
-    public function test_lpo_payment_method_works_as_a_one_off_sale_without_a_customer(): void
+    public function test_an_lpo_sale_is_charged_to_the_customers_lpo_and_stops_at_its_amount(): void
     {
-        // Separately, "lpo" is also a plain payment method for a single sale
-        // covered by a purchase order that isn't tracked against a running
-        // account balance — same shape as cash/momo/airtel.
         $this->seedPlatePrice();
         $store = Store::factory()->create();
         $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
+        $customer = $this->lpoCustomer($cashier, ['number' => 'LPO-0042', 'amount' => 25000, 'covers' => ['Lunch']]);
 
+        // LPO needs the customer it is charged to.
         $this->actingAs($cashier)->postJson('/api/sales', [
             'payment_method' => 'lpo',
-            'lines' => [['item_type' => 'plate', 'qty' => 2]],
-        ])->assertCreated()->assertJson(['payment_method' => 'lpo', 'total' => 50000]);
+            'lines' => [['item_type' => 'plate', 'qty' => 1]],
+        ])->assertUnprocessable()->assertJsonValidationErrors('customer_id');
+
+        $sale = $this->actingAs($cashier)->postJson('/api/sales', [
+            'payment_method' => 'lpo',
+            'customer_id' => $customer->id,
+            'lines' => [['item_type' => 'plate', 'qty' => 1]],
+        ])->assertCreated()->assertJsonPath('payment_method', 'lpo');
+        $this->assertEquals(0, $customer->fresh()->balance());
+        $this->assertNotNull($sale->json('customer_lpo_id'));
+
+        // "Account" for an LPO customer is charged as LPO too.
+        $this->actingAs($cashier)->postJson('/api/sales', [
+            'payment_method' => 'account',
+            'customer_id' => $customer->id,
+            'lines' => [['item_type' => 'plate', 'qty' => 1]],
+        ])->assertStatus(422)->assertJsonFragment(['This customer does not have sufficient LPO balance remaining.']);
+    }
+
+    public function test_an_lpo_covers_only_what_it_says_and_no_more_plates_than_it_includes(): void
+    {
+        $this->seedPlatePrice();
+        $store = Store::factory()->create();
+        $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
+        $customer = $this->lpoCustomer($cashier, ['number' => 'LPO-7', 'amount' => 1000000, 'plates' => 3, 'covers' => ['Lunch']]);
+        $soda = Item::factory()->create(['name' => 'Soda', 'is_drink' => true, 'is_sellable' => true, 'sell_category' => 'Drinks', 'tracks_stock' => false]);
+        \App\Models\DrinkPrice::create(['item_id' => $soda->id, 'price' => 2000, 'effective_from' => now()->toDateString(), 'is_active' => true]);
+
+        $charge = fn (array $lines) => $this->actingAs($cashier)->postJson('/api/sales', [
+            'payment_method' => 'lpo', 'customer_id' => $customer->id, 'lines' => $lines,
+        ]);
+
+        $charge([['item_type' => 'plate', 'qty' => 1], ['item_type' => 'item', 'item_id' => $soda->id, 'qty' => 1]])
+            ->assertUnprocessable()->assertJsonFragment(['LPO LPO-7 does not cover Drinks (Soda). Take payment for it separately.']);
+
+        $charge([['item_type' => 'plate', 'qty' => 2]])->assertCreated();
+        $charge([['item_type' => 'plate', 'qty' => 2]])
+            ->assertUnprocessable()->assertJsonFragment(['LPO LPO-7 has only 1 plates left: cannot charge 2.']);
+
+        $standing = $this->actingAs($cashier)->getJson("/api/customers/{$customer->id}/balance")->json();
+        $this->assertSame(1, $standing['lpo']['plates_left']);
+        $this->assertSame('low', $standing['status']);
+
+        // The next LPO: sales go on it, and what was left carries on.
+        $this->actingAs($cashier)->postJson("/api/customers/{$customer->id}/lpos", [
+            'number' => 'LPO-8', 'amount' => 500000, 'plates' => 20, 'covers' => ['Lunch', 'Drinks'],
+        ])->assertCreated()->assertJsonPath('lpo.plates_left', 20);
+        $charge([['item_type' => 'plate', 'qty' => 2], ['item_type' => 'item', 'item_id' => $soda->id, 'qty' => 2]])->assertCreated();
+        $this->assertCount(2, $this->actingAs($cashier)->getJson("/api/customers/{$customer->id}/lpos")->json('data'));
+        $this->assertEquals(1000000 - 50000 + 500000 - 54000, $customer->fresh()->balance());
+    }
+
+    public function test_a_discount_comes_off_what_the_account_is_charged(): void
+    {
+        $this->seedPlatePrice();
+        $store = Store::factory()->create();
+        $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
+        $customer = Customer::factory()->create(['account_type' => Customer::TYPE_PREPAID]);
+        $this->actingAs($cashier)->postJson("/api/customers/{$customer->id}/deposit", ['amount' => 50000])->assertCreated();
+
+        $this->actingAs($cashier)->postJson('/api/sales', [
+            'payment_method' => 'account', 'customer_id' => $customer->id,
+            'lines' => [['item_type' => 'plate', 'qty' => 1]],
+            'discount' => 5000, 'discount_note' => 'Regular',
+        ])->assertCreated();
+        $this->assertEquals(30000, $customer->fresh()->balance());
     }
 
     public function test_prepaid_customer_can_deposit_upfront_and_draw_down_across_multiple_days(): void

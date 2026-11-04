@@ -14,6 +14,7 @@ import '../../shared/formatters/date_formatter.dart';
 import '../../shared/formatters/ledger_labels.dart';
 import '../../shared/models/customer.dart';
 import '../../shared/widgets/reason_dialog.dart';
+import 'lpo_form.dart';
 
 const _accountTypeFilters = <String?>[null, 'prepaid', 'credit', 'lpo'];
 const _accountTypeLabels = {
@@ -368,6 +369,9 @@ class _NewCustomerSheetState extends ConsumerState<NewCustomerSheet> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _limitController = TextEditingController();
+  final _paidController = TextEditingController();
+  final _lpo = LpoDraft();
+  String _paidBy = 'cash';
   String _accountType = 'prepaid';
   int? _storeId;
   List<Store> _stores = [];
@@ -390,6 +394,8 @@ class _NewCustomerSheetState extends ConsumerState<NewCustomerSheet> {
     _nameController.dispose();
     _phoneController.dispose();
     _limitController.dispose();
+    _paidController.dispose();
+    _lpo.dispose();
     super.dispose();
   }
 
@@ -399,6 +405,11 @@ class _NewCustomerSheetState extends ConsumerState<NewCustomerSheet> {
       setState(() => _error = 'Enter the name and phone number.');
       return;
     }
+    if (_accountType == 'lpo' && _lpo.problem != null) {
+      setState(() => _error = _lpo.problem);
+      return;
+    }
+    final paid = double.tryParse(_paidController.text) ?? 0;
 
     setState(() {
       _submitting = true;
@@ -415,6 +426,9 @@ class _NewCustomerSheetState extends ConsumerState<NewCustomerSheet> {
                 ? (double.tryParse(_limitController.text) ?? 0)
                 : 0,
             storeId: widget.owner ? _storeId : null,
+            amountPaid: _accountType == 'prepaid' && paid > 0 ? paid : null,
+            paidBy: _accountType == 'prepaid' && paid > 0 ? _paidBy : null,
+            lpo: _accountType == 'lpo' ? _lpo.toJson() : null,
           );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -516,6 +530,40 @@ class _NewCustomerSheetState extends ConsumerState<NewCustomerSheet> {
                   'cannot be charged.',
                 ),
             ],
+            if (_accountType == 'prepaid') ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _paidController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: 'Amount paid now',
+                  prefixText: 'UGX ',
+                  helperText: 'Goes onto the account; each meal comes off it.',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final e in paidByOptions.entries)
+                    ChoiceChip(
+                      label: Text(e.value),
+                      selected: _paidBy == e.key,
+                      onSelected: (_) => setState(() => _paidBy = e.key),
+                    ),
+                ],
+              ),
+            ],
+            if (_accountType == 'lpo') ...[
+              const SizedBox(height: 12),
+              const Text(
+                'The company\'s LPO: its amount, the lunch plates it pays for '
+                'and what it covers. Staff eating on it are charged here.',
+              ),
+              const SizedBox(height: 8),
+              LpoFields(draft: _lpo),
+            ],
             if (_error != null) ...[
               const SizedBox(height: 12),
               Text(_error!, style: const TextStyle(color: AppColors.danger)),
@@ -562,6 +610,7 @@ class _CustomerDetailSheetState extends ConsumerState<CustomerDetailSheet> {
   _future;
   final _depositController = TextEditingController();
   final _referenceController = TextEditingController();
+  String _paidBy = 'cash';
   bool _busy = false;
   bool _changed = false;
 
@@ -622,10 +671,19 @@ class _CustomerDetailSheetState extends ConsumerState<CustomerDetailSheet> {
             widget.customer.id,
             amount,
             note: _referenceController.text.trim(),
+            paidBy: _paidBy,
           );
       _depositController.clear();
       _referenceController.clear();
     }, 'Deposit recorded.');
+  }
+
+  Future<void> _newLpo(Customer customer) async {
+    if (await showNewLpoDialog(context, ref, customer)) {
+      if (!mounted) return;
+      _toast('LPO recorded.');
+      _reload();
+    }
   }
 
   Future<void> _correctBalance(Customer customer, double balance) async {
@@ -916,48 +974,76 @@ class _CustomerDetailSheetState extends ConsumerState<CustomerDetailSheet> {
                   StandingBanner(standing: standing),
                 ],
                 const SizedBox(height: 20),
-                Text(
-                  customer.isCredit ? 'Record a payment' : 'Top up',
-                  style: theme.textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _referenceController,
-                  decoration: InputDecoration(
-                    labelText: customer.isLpo
-                        ? 'LPO reference/number (optional)'
-                        : 'Reference/note (optional)',
+                if (customer.isLpo) ...[
+                  if (standing?.lpo case final lpo?)
+                    LpoCard(
+                      lpo: lpo,
+                      onNew: _busy ? null : () => _newLpo(customer),
+                    )
+                  else
+                    FilledButton.icon(
+                      onPressed: _busy ? null : () => _newLpo(customer),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Record the LPO'),
+                    ),
+                ] else ...[
+                  Text(
+                    customer.isCredit ? 'Record a payment' : 'Top up',
+                    style: theme.textTheme.titleMedium,
                   ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _depositController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        decoration: const InputDecoration(
-                          labelText: 'Amount',
-                          prefixText: 'UGX ',
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _referenceController,
+                    decoration: InputDecoration(
+                      labelText: customer.isLpo
+                          ? 'LPO reference/number (optional)'
+                          : 'Reference/note (optional)',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _depositController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Amount',
+                            prefixText: 'UGX ',
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: _busy ? null : _deposit,
-                      child: _busy
-                          ? const SizedBox(
-                              height: 16,
-                              width: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Save'),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: _busy ? null : _deposit,
+                        child: _busy
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Save'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final e in paidByOptions.entries)
+                        ChoiceChip(
+                          label: Text(e.value),
+                          selected: _paidBy == e.key,
+                          onSelected: (_) => setState(() => _paidBy = e.key),
+                        ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 20),
                 Text('Statement', style: theme.textTheme.titleMedium),
                 if (data.entries.isEmpty)

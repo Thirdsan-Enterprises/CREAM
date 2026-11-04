@@ -42,6 +42,9 @@ class CustomersRepository {
     required String accountType,
     double creditLimit = 0,
     int? storeId,
+    double? amountPaid,
+    String? paidBy,
+    Map<String, Object?>? lpo,
   }) async {
     final body = await _api.post(
       '/customers',
@@ -51,9 +54,39 @@ class CustomersRepository {
         'account_type': accountType,
         'credit_limit': creditLimit,
         'store_id': ?storeId,
+        'amount_paid': ?amountPaid,
+        'paid_by': ?paidBy,
+        'lpo': ?lpo,
       },
     );
     return Customer.fromJson(body);
+  }
+
+  /// Records the next LPO an LPO customer brings.
+  Future<AccountStanding> addLpo(
+    int customerId, {
+    String? number,
+    required double amount,
+    int? plates,
+    required List<String> covers,
+  }) async {
+    final body = await _api.post(
+      '/customers/$customerId/lpos',
+      data: {
+        'number': ?number,
+        'amount': amount,
+        'plates': ?plates,
+        'covers': covers,
+      },
+    );
+    return AccountStanding.fromJson(body);
+  }
+
+  Future<List<Lpo>> lpos(int customerId) async {
+    final body = await _api.get('/customers/$customerId/lpos');
+    return (body['data'] as List<dynamic>)
+        .map((e) => Lpo.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   /// Changes details; [fields] are API names (name, phone, is_active,
@@ -115,12 +148,18 @@ class CustomersRepository {
     );
   }
 
-  Future<double> deposit(int customerId, double amount, {String? note}) async {
+  Future<double> deposit(
+    int customerId,
+    double amount, {
+    String? note,
+    String? paidBy,
+  }) async {
     final body = await _api.post(
       '/customers/$customerId/deposit',
       data: {
         'amount': amount,
         if (note != null && note.isNotEmpty) 'note': note,
+        'paid_by': ?paidBy,
       },
     );
     return (body['balance'] as num).toDouble();
