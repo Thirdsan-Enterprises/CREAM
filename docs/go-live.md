@@ -8,13 +8,16 @@ reports and stock balances start clean.
 
 | Deleted | Kept |
 |---|---|
-| Sales and their lines | Branches |
-| Account ledger entries (top-ups, meals charged) | Items and their re-order levels |
-| Stock movements, so **every stock balance returns to 0** | Plate and drink prices |
-| Stock transfers | Catering packages |
-| Catering orders and their payments | The owner (admin) account |
-| *With `--customers`:* all customer accounts | Staff accounts (unless `--users`) |
-| *With `--users`:* all staff accounts except owners | Everyone stays signed in |
+| Sales and their lines (including voided ones) | Branches |
+| Account ledger entries (top-ups, meals charged) | The menu, with each branch's prices and packing price |
+| Stock movements, so **every stock balance returns to 0** (purchases, today's plates, drinks) | Kitchen stock items, their headings and re-order levels |
+| Purchases ledger (it is made from the purchases) | Plate price and catering packages |
+| Stock transfers and branch stock requests | The owner (admin) account |
+| Expenses | Staff accounts (unless `--users`) |
+| Catering orders and their payments | Customer accounts (unless `--customers`) |
+| The Changes log (trial voids and edits) | Everyone stays signed in |
+| *With `--customers`:* all customer accounts | |
+| *With `--users`:* all staff accounts except owners | |
 
 Items, branches and staff added during the trial are **not** removed unless you use the
 options above; remove or edit them in Settings (users can be switched off there).

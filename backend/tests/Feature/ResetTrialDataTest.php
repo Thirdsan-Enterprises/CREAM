@@ -73,6 +73,25 @@ class ResetTrialDataTest extends TestCase
             'related_transfer_id' => $transfer->id, 'user_id' => $this->owner->id, 'occurred_at' => now(),
         ]);
 
+        // A branch asked for stock and procurement answered with the transfer.
+        $request = DB::table('stock_requests')->insertGetId([
+            'store_id' => $lugogo->id, 'requested_by' => $this->staff->id, 'status' => 'sent',
+            'responded_by' => $this->owner->id, 'stock_transfer_id' => $transfer->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('stock_request_items')->insert([
+            'stock_request_id' => $request, 'item_id' => $item->id, 'qty_requested' => 5, 'qty_sent' => 5,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('expenses')->insert([
+            'store_id' => $lugogo->id, 'amount' => 5000, 'category' => 'Transport', 'paid_from' => 'cash',
+            'recorded_by' => $this->staff->id, 'spent_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('edit_logs')->insert([
+            'user_id' => $this->staff->id, 'store_id' => $lugogo->id, 'subject_type' => 'sale',
+            'subject_id' => $sale->id, 'subject_label' => "Sale #{$sale->id}", 'action' => 'voided', 'reason' => 'Trial',
+        ]);
+
         $order = CateringOrder::factory()->create(['catering_package_id' => $package->id, 'created_by' => $this->staff->id]);
         CateringPayment::create([
             'catering_order_id' => $order->id, 'amount' => 1000, 'payment_method' => 'cash',
@@ -83,7 +102,9 @@ class ResetTrialDataTest extends TestCase
     private function tradingRecords(): int
     {
         return Sale::count() + SaleItem::count() + LedgerEntry::count() + StockMovement::count()
-            + StockTransfer::count() + StockTransferItem::count() + CateringOrder::count() + CateringPayment::count();
+            + StockTransfer::count() + StockTransferItem::count() + CateringOrder::count() + CateringPayment::count()
+            + DB::table('stock_requests')->count() + DB::table('stock_request_items')->count()
+            + DB::table('expenses')->count() + DB::table('edit_logs')->count();
     }
 
     public function test_without_force_it_only_reports_and_deletes_nothing(): void
