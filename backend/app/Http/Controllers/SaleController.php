@@ -65,7 +65,7 @@ class SaleController extends Controller
             'payment_method' => ['required', Rule::in([
                 Sale::PAYMENT_CASH, Sale::PAYMENT_MOMO, Sale::PAYMENT_AIRTEL, Sale::PAYMENT_ACCOUNT, Sale::PAYMENT_LPO,
             ])],
-            'customer_id' => ['nullable', 'exists:customers,id', 'required_if:payment_method,'.Sale::PAYMENT_ACCOUNT],
+            'customer_id' => ['nullable', 'exists:customers,id', 'required_if:payment_method,'.Sale::PAYMENT_ACCOUNT.','.Sale::PAYMENT_LPO],
             'lines' => ['required', 'array', 'min:1'],
             // 'drink' is what apps sent before any item could be sold; it
             // means the same as 'item'.
@@ -101,7 +101,8 @@ class SaleController extends Controller
         }
 
         $customer = null;
-        if ($data['payment_method'] === Sale::PAYMENT_ACCOUNT) {
+        $lpo = null;
+        if (in_array($data['payment_method'], [Sale::PAYMENT_ACCOUNT, Sale::PAYMENT_LPO], true)) {
             $customer = Customer::findOrFail($data['customer_id']);
             if ($customer->store_id !== null && $customer->store_id !== $storeId) {
                 $home = $customer->store?->name ?? 'another branch';
@@ -114,9 +115,20 @@ class SaleController extends Controller
                     'customer_id' => ["{$customer->name}'s account is closed."],
                 ]);
             }
+            // LPO customers are charged by LPO, and only they are.
+            if ($customer->account_type === Customer::TYPE_LPO) {
+                $data['payment_method'] = Sale::PAYMENT_LPO;
+                $lpo = $customer->currentLpo() ?? throw ValidationException::withMessages([
+                    'customer_id' => ["{$customer->name} has no LPO yet. Record the LPO on their account first."],
+                ]);
+            } elseif ($data['payment_method'] === Sale::PAYMENT_LPO) {
+                throw ValidationException::withMessages([
+                    'customer_id' => ["{$customer->name} is not an LPO account. Choose Account to charge them."],
+                ]);
+            }
         }
 
-        $sale = DB::transaction(function () use ($data, $storeId, $user, $customer, $discount) {
+        $sale = DB::transaction(function () use ($data, $storeId, $user, $customer, $discount, $lpo) {
             $this->assertItemsInStock($data['lines'], $storeId);
 
             $lineInputs = [];
@@ -168,6 +180,10 @@ class SaleController extends Controller
                 ];
             }
 
+            if ($lpo) {
+                $this->assertLpoCovers($lpo, $lineInputs);
+            }
+
             if ($discount >= $total) {
                 throw ValidationException::withMessages(['discount' => ['The discount must be less than the sale ('.number_format($total).').']]);
             }
@@ -177,6 +193,7 @@ class SaleController extends Controller
                 'sold_by' => $user->id,
                 'payment_method' => $data['payment_method'],
                 'customer_id' => $customer?->id,
+                'customer_lpo_id' => $lpo?->id,
                 'total' => $total - $discount,
                 'discount' => $discount,
                 'discount_note' => $discount > 0 ? trim($data['discount_note']) : null,
@@ -202,7 +219,9 @@ class SaleController extends Controller
             }
 
             if ($customer) {
-                $this->ledgerService->debit($customer, $total, $sale->id, $user->id, 'Sale #'.$sale->id);
+                // What the customer pays: after any discount.
+                $this->ledgerService->debit($customer, $total - $discount, $sale->id, $user->id,
+                    'Sale #'.$sale->id.($lpo ? ' on LPO '.($lpo->number ?: '#'.$lpo->id) : ''));
             }
 
             return $sale;
@@ -218,6 +237,43 @@ class SaleController extends Controller
     }
 
     /** Dishes under the Lunch heading are plates. */
+    /**
+     * An LPO pays only for what it covers (lunch, breakfast, drinks) and
+     * for no more lunch plates than it includes. Packing for takeaway is
+     * always allowed.
+     */
+    private function assertLpoCovers(\App\Models\CustomerLpo $lpo, array $lines): void
+    {
+        $label = 'LPO '.($lpo->number ?: '#'.$lpo->id);
+        $plates = 0;
+        foreach ($lines as $line) {
+            $item = $line['item_id'] ? Item::find($line['item_id']) : null;
+            $heading = $line['item_type'] === SaleItem::TYPE_PLATE
+                ? 'Lunch'
+                : ($item->sell_category ?: ($item->is_drink ? 'Drinks' : 'Other'));
+            if ($line['item_type'] === SaleItem::TYPE_PLATE) {
+                $plates += $line['qty'];
+            }
+            if (strcasecmp($heading, 'Packing') === 0 || $lpo->covers($heading)) {
+                continue;
+            }
+            $what = $item?->name ?? 'Plate';
+            throw ValidationException::withMessages(['lines' => [
+                "{$label} does not cover {$heading} ({$what}). Take payment for it separately.",
+            ]]);
+        }
+        if ($lpo->plates !== null && $plates > 0) {
+            $left = $lpo->plates - $lpo->platesUsed();
+            if ($plates > $left) {
+                throw ValidationException::withMessages(['lines' => [
+                    $left <= 0
+                        ? "{$label} has no plates left (all {$lpo->plates} used)."
+                        : "{$label} has only {$left} plates left: cannot charge {$plates}.",
+                ]]);
+            }
+        }
+    }
+
     public static function isLunch(?Item $item): bool
     {
         return $item !== null && strcasecmp((string) $item->sell_category, 'Lunch') === 0;

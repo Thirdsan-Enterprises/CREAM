@@ -36,10 +36,36 @@ class CustomerTest extends TestCase
             'name' => 'Acme Ltd (Office Lunch)',
             'phone' => '0700999777',
             'account_type' => 'lpo',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['lpo.amount', 'lpo.covers']);
+
+        // The LPO itself: its number, value, plates and what it covers.
+        $response = $this->actingAs($cashier)->postJson('/api/customers', [
+            'name' => 'Acme Ltd (Office Lunch)',
+            'phone' => '0700999777',
+            'account_type' => 'lpo',
+            'lpo' => ['number' => 'LPO-0042', 'amount' => 1500000, 'plates' => 60, 'covers' => ['Lunch', 'Breakfast']],
         ]);
 
-        $response->assertCreated();
+        $response->assertCreated()
+            ->assertJsonPath('balance', 1500000)
+            ->assertJsonPath('lpo.number', 'LPO-0042')
+            ->assertJsonPath('lpo.plates_left', 60)
+            ->assertJsonPath('lpo.covers', ['Lunch', 'Breakfast']);
         $this->assertDatabaseHas('customers', ['phone' => '0700999777', 'account_type' => 'lpo']);
+    }
+
+    public function test_a_prepaid_account_is_opened_with_what_was_paid(): void
+    {
+        $store = Store::factory()->create();
+        $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
+
+        $id = $this->actingAs($cashier)->postJson('/api/customers', [
+            'name' => 'Sarah N', 'phone' => '0700111222', 'account_type' => 'prepaid',
+            'amount_paid' => 100000, 'paid_by' => 'momo',
+        ])->assertCreated()->assertJsonPath('balance', 100000)->json('id');
+
+        $entry = $this->actingAs($cashier)->getJson("/api/customers/{$id}/statement")->json('entries.data.0');
+        $this->assertSame('Opening payment (MoMo)', $entry['note']);
     }
 
     public function test_search_finds_customer_by_name_or_phone(): void

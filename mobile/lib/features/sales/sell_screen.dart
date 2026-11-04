@@ -174,9 +174,16 @@ class _SellScreenState extends ConsumerState<SellScreen> {
     final customer = await showModalBottomSheet<Customer>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => _CustomerSearchSheet(storeId: widget.storeId),
+      builder: (context) => _CustomerSearchSheet(
+        storeId: widget.storeId,
+        lpoOnly: _cart.paymentMethod == 'lpo',
+      ),
     );
     if (customer == null) return;
+    // An LPO customer picked under Account is charged by LPO.
+    if (customer.isLpo && _cart.paymentMethod != 'lpo') {
+      _cart.setPayment('lpo');
+    }
 
     _cart.update(() {
       _cart.customer = customer;
@@ -199,8 +206,17 @@ class _SellScreenState extends ConsumerState<SellScreen> {
 
   /// Rings up the order. Returns true when the sale went through.
   Future<bool> _submit() async {
-    if (_cart.paymentMethod == 'account' && _cart.customer == null) {
-      _snack('Select a customer to charge this sale to.');
+    if (_cart.chargesCustomer && _cart.customer == null) {
+      _snack(
+        _cart.paymentMethod == 'lpo'
+            ? 'Select the LPO customer (the company) to charge this to.'
+            : 'Select a customer to charge this sale to.',
+      );
+      return false;
+    }
+    final lpoProblem = _cart.lpoProblem;
+    if (lpoProblem != null) {
+      _snack(lpoProblem, error: true);
       return false;
     }
     _cart.update(() => _cart.submitting = true);
@@ -834,7 +850,10 @@ class OrderPanel extends StatelessWidget {
       listenable: cart,
       builder: (context, _) {
         final canCharge =
-            !cart.isEmpty && !cart.submitting && !cart.exceedsAccount;
+            !cart.isEmpty &&
+            !cart.submitting &&
+            !cart.exceedsAccount &&
+            cart.lpoProblem == null;
         return Column(
           children: [
             Expanded(
@@ -916,7 +935,7 @@ class OrderPanel extends StatelessWidget {
                       const SizedBox(height: 12),
                       _CashBox(cart: cart),
                     ],
-                    if (cart.paymentMethod == 'account') ...[
+                    if (cart.chargesCustomer) ...[
                       const SizedBox(height: 12),
                       _AccountBox(cart: cart, onPick: onPickCustomer),
                     ],
@@ -1360,7 +1379,12 @@ class _AccountBox extends StatelessWidget {
         children: [
           ListTile(
             leading: const Icon(Icons.person_search),
-            title: Text(customer?.name ?? 'Select customer'),
+            title: Text(
+              customer?.name ??
+                  (cart.paymentMethod == 'lpo'
+                      ? 'Select the LPO customer'
+                      : 'Select customer'),
+            ),
             subtitle: customer == null
                 ? null
                 : Text('${customer.phone} · ${customer.accountTypeLabel}'),
@@ -1399,6 +1423,28 @@ class _AccountBox extends StatelessWidget {
                           Text(
                             'Available: ${CurrencyFormatter.format(available)}',
                           ),
+                        if (standing?.lpo case final lpo?) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            [
+                              lpo.label,
+                              if (lpo.platesLeft != null)
+                                '${lpo.platesLeft} plates left',
+                              'covers ${lpo.covers.join(', ')}',
+                            ].join(' · '),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                        if (cart.lpoProblem case final problem?) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            problem,
+                            style: const TextStyle(
+                              color: AppColors.danger,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                         if (standing != null && standing.status != 'ok') ...[
                           const SizedBox(height: 8),
                           StandingBanner(standing: standing),
@@ -1413,10 +1459,13 @@ class _AccountBox extends StatelessWidget {
 }
 
 class _CustomerSearchSheet extends ConsumerStatefulWidget {
-  const _CustomerSearchSheet({this.storeId});
+  const _CustomerSearchSheet({this.storeId, this.lpoOnly = false});
 
   /// The branch the owner is selling for; null for staff.
   final int? storeId;
+
+  /// Paying by LPO: only LPO customers (the companies).
+  final bool lpoOnly;
 
   @override
   ConsumerState<_CustomerSearchSheet> createState() =>
@@ -1439,7 +1488,11 @@ class _CustomerSearchSheetState extends ConsumerState<_CustomerSearchSheet> {
     try {
       final results = await ref
           .read(customersRepositoryProvider)
-          .search(query, availableAt: widget.storeId);
+          .search(
+            query,
+            availableAt: widget.storeId,
+            accountType: widget.lpoOnly ? 'lpo' : null,
+          );
       if (mounted) setState(() => _results = results);
     } finally {
       if (mounted) setState(() => _searching = false);

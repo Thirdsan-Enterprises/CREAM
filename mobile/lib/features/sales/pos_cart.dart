@@ -118,8 +118,37 @@ class PosCart extends ChangeNotifier {
     return null;
   }
 
+  /// Charged to a customer: their account, or their company's LPO.
+  bool get chargesCustomer =>
+      paymentMethod == 'account' || paymentMethod == 'lpo';
+
   bool get exceedsAccount =>
-      paymentMethod == 'account' && available != null && total > available!;
+      chargesCustomer && available != null && total > available!;
+
+  /// Lunch plates in the order (what an LPO's plate count is checked on).
+  int get lunchPlates => foodLines
+      .where((l) => l.item.isPlate || l.item.category.toLowerCase() == 'lunch')
+      .fold(0, (sum, l) => sum + l.qty);
+
+  /// Why the chosen LPO cannot pay for this order, if it cannot.
+  String? get lpoProblem {
+    final lpo = standing?.lpo;
+    if (paymentMethod != 'lpo' || lpo == null) return null;
+    for (final l in foodLines) {
+      final heading = l.item.isPlate ? 'Lunch' : l.item.category;
+      if (!lpo.covers.any((c) => c.toLowerCase() == heading.toLowerCase())) {
+        return '${lpo.label} does not cover $heading (${l.item.name}). '
+            'Take payment for it separately.';
+      }
+    }
+    final left = lpo.platesLeft;
+    if (left != null && lunchPlates > left) {
+      return left <= 0
+          ? '${lpo.label} has no plates left.'
+          : '${lpo.label} has only $left plates left.';
+    }
+    return null;
+  }
 
   /// Adds one; returns a message instead when there are none left.
   String? add(PosItem item) => setQty(item, qtyOf(item) + 1);
@@ -188,6 +217,12 @@ class PosCart extends ChangeNotifier {
 
   void setPayment(String method) {
     paymentMethod = method;
+    // An LPO is charged to an LPO customer, Account to anyone else.
+    final c = customer;
+    if (c != null && ((method == 'lpo') != c.isLpo || !chargesCustomer)) {
+      customer = null;
+      standing = null;
+    }
     notifyListeners();
   }
 

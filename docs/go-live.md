@@ -8,13 +8,16 @@ reports and stock balances start clean.
 
 | Deleted | Kept |
 |---|---|
-| Sales and their lines | Branches |
-| Account ledger entries (top-ups, meals charged) | Items and their re-order levels |
-| Stock movements, so **every stock balance returns to 0** | Plate and drink prices |
-| Stock transfers | Catering packages |
-| Catering orders and their payments | The owner (admin) account |
-| *With `--customers`:* all customer accounts | Staff accounts (unless `--users`) |
-| *With `--users`:* all staff accounts except owners | Everyone stays signed in |
+| Sales and their lines (including voided ones) | Branches |
+| Account ledger entries (top-ups, meals charged) | The menu, with each branch's prices and packing price |
+| Stock movements, so **every stock balance returns to 0** (purchases, today's plates, drinks) | Kitchen stock items, their headings and re-order levels |
+| Purchases ledger (it is made from the purchases) | Plate price and catering packages |
+| Stock transfers and branch stock requests | The owner (admin) account |
+| Expenses | Staff accounts (unless `--users`) |
+| Catering orders and their payments | Customer accounts (unless `--customers`) |
+| The Changes log (trial voids and edits) | Everyone stays signed in |
+| *With `--customers`:* all customer accounts | |
+| *With `--users`:* all staff accounts except owners | |
 
 Items, branches and staff added during the trial are **not** removed unless you use the
 options above; remove or edit them in Settings (users can be switched off there).
@@ -113,3 +116,27 @@ hidden if it already has history.
 Store managers see their branch's kitchen stock (Stock > Balances) and
 confirm what procurement sends; only procurement and the owner add or remove
 kitchen items.
+
+# Customer accounts and LPOs
+
+Opening an account asks for its money up front:
+
+- **Prepaid:** the amount paid now and how (cash, MoMo, Airtel, bank). Each
+  meal comes off it.
+- **Credit:** the owner sets the credit limit.
+- **LPO** (a company whose staff eat on a purchase order): the LPO number,
+  its amount, how many lunch plates it pays for (optional) and what it
+  covers. Lunch, Breakfast and Drinks start ticked: untick what the
+  company does not pay for.
+
+The owner can correct an LPO recorded wrongly (the pencil on the LPO
+card): number, amount, plates or what it covers, with a reason that shows
+in Changes. A new amount moves the balance by the difference; plates and
+amount cannot go below what is already charged to it.
+
+Selling on an LPO: choose **LPO** under *Paid by*, then the company. The
+sale is refused if the LPO does not cover something in the order (take
+payment for that separately), if its plates are used up, or if its amount
+is used up. Packing for takeaway is always allowed. When the company sends
+its next LPO, open the account and tap **New LPO**; what was left on the
+account carries on.

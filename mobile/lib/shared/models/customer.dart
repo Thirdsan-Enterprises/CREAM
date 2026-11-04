@@ -7,6 +7,7 @@ class AccountStanding {
     required this.status,
     this.creditUsedPct,
     this.warning,
+    this.lpo,
   });
 
   factory AccountStanding.fromJson(Map<String, dynamic> json) =>
@@ -16,6 +17,9 @@ class AccountStanding {
         status: json['status'] as String? ?? 'ok',
         creditUsedPct: (json['credit_used_pct'] as num?)?.toDouble(),
         warning: json['warning'] as String?,
+        lpo: json['lpo'] is Map<String, dynamic>
+            ? Lpo.fromJson(json['lpo'] as Map<String, dynamic>)
+            : null,
       );
 
   final double balance;
@@ -25,6 +29,9 @@ class AccountStanding {
   final String status;
   final double? creditUsedPct;
   final String? warning;
+
+  /// The LPO an LPO customer's sales are charged to now.
+  final Lpo? lpo;
 
   bool get isLow => status == 'low';
   bool get isBlocked => status == 'blocked';
@@ -113,4 +120,33 @@ class LedgerEntry {
   final String? note;
   final DateTime occurredAt;
   final String? recordedByName;
+}
+
+/// An LPO a company gave: its value, the lunch plates it pays for and what
+/// it covers (Lunch, Breakfast, Drinks).
+class Lpo {
+  Lpo.fromJson(Map<String, dynamic> json)
+    : id = json['id'] as int,
+      number = json['number'] as String?,
+      amount = (json['amount'] as num).toDouble(),
+      amountUsed = (json['amount_used'] as num?)?.toDouble() ?? 0,
+      plates = json['plates'] as int?,
+      platesUsed = json['plates_used'] as int? ?? 0,
+      platesLeft = json['plates_left'] as int?,
+      covers = (json['covers'] as List<dynamic>? ?? const []).cast<String>(),
+      createdAt = json['created_at'] == null
+          ? null
+          : DateTime.tryParse(json['created_at'] as String);
+
+  final int id;
+  final String? number;
+  final double amount;
+  final double amountUsed;
+  final int? plates;
+  final int platesUsed;
+  final int? platesLeft;
+  final List<String> covers;
+  final DateTime? createdAt;
+
+  String get label => 'LPO ${number ?? '#$id'}';
 }

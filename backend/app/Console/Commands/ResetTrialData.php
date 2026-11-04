@@ -9,12 +9,15 @@ use Illuminate\Support\Facades\DB;
 /**
  * Clears the records made while trying the system out, ready for go-live.
  *
- * Deleted: sales, stock movements (every balance returns to 0), transfers,
- * catering orders and their payments, account ledger entries. Optionally
- * the customer accounts (--customers) and the staff accounts (--users).
+ * Deleted: sales, stock movements (every balance returns to 0, including
+ * today's plates and purchase prices), transfers, branch stock requests,
+ * expenses, catering orders and their payments, account ledger entries and
+ * the Changes log. Optionally the customer accounts (--customers) and the
+ * staff accounts (--users).
  *
- * Kept: branches, items and their re-order levels, plate and drink prices,
- * catering packages, and the owner (admin) account. Nothing here is
+ * Kept: branches, the menu and kitchen stock items, re-order levels, plate,
+ * menu and packing prices, catering packages, and the owner (admin)
+ * account. Nothing here is
  * recoverable, so it only reports what it would delete unless --force is
  * given, and it asks before deleting.
  */
@@ -36,7 +39,7 @@ class ResetTrialData extends Command
             ['What', 'Records'],
             array_map(fn ($label, $count) => [$label, $count], array_keys($plan), array_values($plan)),
         );
-        $this->line('Kept: branches, items, re-order levels, prices, catering packages and the owner account.');
+        $this->line('Kept: branches, menu and kitchen stock items, re-order levels, prices, catering packages and the owner account.');
 
         if (! $this->option('force')) {
             $this->newLine();
@@ -57,6 +60,14 @@ class ResetTrialData extends Command
             DB::table('sale_items')->delete();
             DB::table('ledger_entries')->delete();
             DB::table('sales')->delete();
+            // LPOs brought during the trial; their value was in the ledger.
+            DB::table('customer_lpos')->delete();
+
+            DB::table('expenses')->delete();
+
+            // A request points at the transfer that answered it.
+            DB::table('stock_request_items')->delete();
+            DB::table('stock_requests')->delete();
 
             DB::table('stock_movements')->delete();
             DB::table('stock_transfer_items')->delete();
@@ -64,6 +75,9 @@ class ResetTrialData extends Command
 
             DB::table('catering_payments')->delete();
             DB::table('catering_orders')->delete();
+
+            // The trial's voids, corrections and price changes.
+            DB::table('edit_logs')->delete();
 
             if ($this->option('customers')) {
                 DB::table('customers')->delete();
@@ -85,8 +99,12 @@ class ResetTrialData extends Command
         $plan = [
             'Sales (and their lines)' => DB::table('sales')->count(),
             'Account ledger entries' => DB::table('ledger_entries')->count(),
+            'LPOs recorded' => DB::table('customer_lpos')->count(),
             'Stock movements (balances reset to 0)' => DB::table('stock_movements')->count(),
             'Stock transfers' => DB::table('stock_transfers')->count(),
+            'Branch stock requests' => DB::table('stock_requests')->count(),
+            'Expenses' => DB::table('expenses')->count(),
+            'Changes log entries' => DB::table('edit_logs')->count(),
             'Catering orders' => DB::table('catering_orders')->count(),
             'Catering payments' => DB::table('catering_payments')->count(),
         ];

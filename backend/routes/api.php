@@ -90,9 +90,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/customers/{customer}/statement', [CustomerController::class, 'statement']);
         Route::get('/customers/{customer}/balance', [CustomerController::class, 'balance']);
         Route::post('/customers/{customer}/deposit', [CustomerController::class, 'deposit']);
+        Route::get('/customers/{customer}/lpos', [CustomerController::class, 'lpos']);
+        Route::post('/customers/{customer}/lpos', [CustomerController::class, 'addLpo']);
     });
 
     Route::middleware('role:'.User::ROLE_ADMIN)->group(function () {
+        Route::patch('/customers/{customer}/lpos/{lpo}', [CustomerController::class, 'updateLpo']);
         Route::post('/stores', [StoreController::class, 'store']);
         Route::patch('/stores/{store}', [StoreController::class, 'update']);
 

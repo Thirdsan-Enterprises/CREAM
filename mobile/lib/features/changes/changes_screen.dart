@@ -169,10 +169,16 @@ const _actionLabels = {
   'stock_corrected': 'Stock corrected',
   'edited': 'Edited',
   'status_changed': 'Status changed',
+  'balance_corrected': 'Balance corrected',
+  'lpo_edited': 'LPO corrected',
 };
 
 const _fieldLabels = {
   'price': 'Price',
+  'covers': 'Covers',
+  'plates': 'Lunch plates',
+  'amount': 'Amount',
+  'number': 'LPO number',
   'price_per_plate': 'Price per plate',
   'number_of_plates': 'Plates',
   'total_amount': 'Total',
