@@ -126,7 +126,13 @@ Opening an account asks for its money up front:
 - **Credit:** the owner sets the credit limit.
 - **LPO** (a company whose staff eat on a purchase order): the LPO number,
   its amount, how many lunch plates it pays for (optional) and what it
-  covers (Lunch, Breakfast, Drinks).
+  covers. Lunch, Breakfast and Drinks start ticked: untick what the
+  company does not pay for.
+
+The owner can correct an LPO recorded wrongly (the pencil on the LPO
+card): number, amount, plates or what it covers, with a reason that shows
+in Changes. A new amount moves the balance by the difference; plates and
+amount cannot go below what is already charged to it.
 
 Selling on an LPO: choose **LPO** under *Paid by*, then the company. The
 sale is refused if the LPO does not cover something in the order (take

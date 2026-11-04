@@ -184,6 +184,36 @@ class SaleTest extends TestCase
         $this->assertEquals(1000000 - 50000 + 500000 - 54000, $customer->fresh()->balance());
     }
 
+    public function test_the_owner_corrects_an_lpo_and_it_is_logged(): void
+    {
+        $this->seedPlatePrice();
+        $store = Store::factory()->create();
+        $cashier = User::factory()->create(['role' => User::ROLE_CASHIER, 'store_id' => $store->id]);
+        $owner = User::factory()->create(['role' => User::ROLE_ADMIN, 'store_id' => null]);
+        $customer = $this->lpoCustomer($cashier, ['number' => 'LPO-9', 'amount' => 100000, 'plates' => 4, 'covers' => ['Lunch']]);
+        $lpo = $customer->currentLpo();
+        $this->actingAs($cashier)->postJson('/api/sales', [
+            'payment_method' => 'lpo', 'customer_id' => $customer->id, 'lines' => [['item_type' => 'plate', 'qty' => 2]],
+        ])->assertCreated();
+
+        $url = "/api/customers/{$customer->id}/lpos/{$lpo->id}";
+        $this->actingAs($cashier)->patchJson($url, ['covers' => ['Lunch', 'Drinks'], 'reason' => 'x'])->assertForbidden();
+        $this->actingAs($owner)->patchJson($url, ['covers' => ['Lunch', 'Drinks']])->assertUnprocessable()->assertJsonValidationErrors('reason');
+        $this->actingAs($owner)->patchJson($url, ['plates' => 1, 'reason' => 'typo'])
+            ->assertUnprocessable()->assertJsonFragment(['2 plates are already charged to LPO LPO-9.']);
+
+        $this->actingAs($owner)->patchJson($url, [
+            'number' => 'LPO-9A', 'amount' => 150000, 'plates' => 6, 'covers' => ['Lunch', 'Breakfast', 'Drinks'], 'reason' => 'Drinks forgotten',
+        ])->assertOk()
+            ->assertJsonPath('lpo.plates_left', 4)
+            ->assertJsonPath('lpo.covers', ['Lunch', 'Breakfast', 'Drinks'])
+            ->assertJsonPath('balance', 150000 - 50000);
+
+        $log = \App\Models\EditLog::latest('id')->first();
+        $this->assertSame('lpo_edited', $log->action);
+        $this->assertSame('Lunch, Breakfast, Drinks', $log->changes['covers']['to']);
+    }
+
     public function test_a_discount_comes_off_what_the_account_is_charged(): void
     {
         $this->seedPlatePrice();

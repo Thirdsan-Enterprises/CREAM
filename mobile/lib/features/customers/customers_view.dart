@@ -678,10 +678,10 @@ class _CustomerDetailSheetState extends ConsumerState<CustomerDetailSheet> {
     }, 'Deposit recorded.');
   }
 
-  Future<void> _newLpo(Customer customer) async {
-    if (await showNewLpoDialog(context, ref, customer)) {
+  Future<void> _newLpo(Customer customer, {Lpo? existing}) async {
+    if (await showNewLpoDialog(context, ref, customer, existing: existing)) {
       if (!mounted) return;
-      _toast('LPO recorded.');
+      _toast(existing == null ? 'LPO recorded.' : 'LPO updated.');
       _reload();
     }
   }
@@ -979,6 +979,9 @@ class _CustomerDetailSheetState extends ConsumerState<CustomerDetailSheet> {
                     LpoCard(
                       lpo: lpo,
                       onNew: _busy ? null : () => _newLpo(customer),
+                      onEdit: _isOwner && !_busy
+                          ? () => _newLpo(customer, existing: lpo)
+                          : null,
                     )
                   else
                     FilledButton.icon(

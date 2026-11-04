@@ -82,6 +82,29 @@ class CustomersRepository {
     return AccountStanding.fromJson(body);
   }
 
+  /// Corrects an LPO (owner only); a reason is required and logged.
+  Future<AccountStanding> updateLpo(
+    int customerId,
+    int lpoId, {
+    String? number,
+    required double amount,
+    int? plates,
+    required List<String> covers,
+    required String reason,
+  }) async {
+    final body = await _api.patch(
+      '/customers/$customerId/lpos/$lpoId',
+      data: {
+        'number': number,
+        'amount': amount,
+        'plates': plates,
+        'covers': covers,
+        'reason': reason,
+      },
+    );
+    return AccountStanding.fromJson(body);
+  }
+
   Future<List<Lpo>> lpos(int customerId) async {
     final body = await _api.get('/customers/$customerId/lpos');
     return (body['data'] as List<dynamic>)

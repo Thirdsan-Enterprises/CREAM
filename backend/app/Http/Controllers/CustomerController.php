@@ -204,6 +204,75 @@ class CustomerController extends Controller
         ], 201);
     }
 
+    /**
+     * Correct an LPO recorded wrongly: its number, amount, plates or what
+     * it covers. Owner only, with a reason, logged. A new amount moves the
+     * account balance by the difference; plates and amount cannot go below
+     * what has already been charged to it.
+     */
+    public function updateLpo(Request $request, Customer $customer, CustomerLpo $lpo)
+    {
+        abort_unless($lpo->customer_id === $customer->id, 404);
+        $data = $request->validate([
+            'number' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'amount' => ['sometimes', 'numeric', 'gt:0'],
+            'plates' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'covers' => ['sometimes', 'array', 'min:1'],
+            'covers.*' => [Rule::in(CustomerLpo::COVERS)],
+            'reason' => ['required', 'string', 'max:500'],
+        ], [
+            'reason.required' => 'Say why this LPO is changing.',
+            'covers.min' => 'Tick what the LPO covers (lunch, breakfast, drinks).',
+        ]);
+
+        $label = 'LPO '.($lpo->number ?: '#'.$lpo->id);
+        if (array_key_exists('plates', $data) && $data['plates'] !== null && $data['plates'] < $lpo->platesUsed()) {
+            throw ValidationException::withMessages(['plates' => ["{$lpo->platesUsed()} plates are already charged to {$label}."]]);
+        }
+        if (isset($data['amount']) && $data['amount'] < $lpo->amountUsed()) {
+            throw ValidationException::withMessages(['amount' => ['UGX '.number_format($lpo->amountUsed())." is already charged to {$label}."]]);
+        }
+
+        $user = $request->user();
+        DB::transaction(function () use ($customer, $lpo, $data, $user, $label) {
+            $fields = ['number', 'amount', 'plates', 'covers'];
+            $before = [...$lpo->only($fields), 'amount' => (float) $lpo->amount];
+            if (isset($data['number'])) {
+                $data['number'] = trim($data['number']) ?: null;
+            }
+            if (isset($data['covers'])) {
+                $data['covers'] = array_values(array_intersect(CustomerLpo::COVERS, $data['covers']));
+            }
+            $lpo->fill(array_intersect_key($data, array_flip($fields)))->save();
+            $after = [...$lpo->only($fields), 'amount' => (float) $lpo->amount];
+            $changes = EditLog::diff(
+                [...$before, 'covers' => implode(', ', $before['covers'] ?? [])],
+                [...$after, 'covers' => implode(', ', $after['covers'] ?? [])],
+            );
+
+            $difference = $after['amount'] - $before['amount'];
+            if (abs($difference) >= 0.01) {
+                LedgerEntry::create([
+                    'customer_id' => $customer->id,
+                    'type' => LedgerEntry::TYPE_ADJUSTMENT,
+                    'amount' => $difference,
+                    'note' => "{$label} amount corrected: ".trim($data['reason']),
+                    'recorded_by' => $user->id,
+                    'occurred_at' => now(),
+                ]);
+            }
+            if ($changes) {
+                EditLog::record($user, 'customer', $customer->id, "Customer: {$customer->name} ({$label})",
+                    'lpo_edited', $changes, $data['reason'], $customer->store_id);
+            }
+        });
+
+        return response()->json([
+            'lpo' => $lpo->fresh()->summary(),
+            ...$this->standing->for($customer),
+        ]);
+    }
+
     /** Every LPO the customer has brought, newest first. */
     public function lpos(Request $request, Customer $customer)
     {

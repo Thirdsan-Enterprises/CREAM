@@ -95,6 +95,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::middleware('role:'.User::ROLE_ADMIN)->group(function () {
+        Route::patch('/customers/{customer}/lpos/{lpo}', [CustomerController::class, 'updateLpo']);
         Route::post('/stores', [StoreController::class, 'store']);
         Route::patch('/stores/{store}', [StoreController::class, 'update']);
 
