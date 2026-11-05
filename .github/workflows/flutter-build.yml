@@ -9,7 +9,12 @@ on:
   pull_request:
     paths:
       - 'mobile/**'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'Server the app talks to (ends in /api)'
+        required: false
+        default: 'https://cream.ambozygraphics.com/api'
 
 permissions:
   contents: read
@@ -65,7 +70,7 @@ jobs:
       - name: Build release APK (per-ABI, smaller than a fat debug build)
         run: |
           flutter build apk --release --split-per-abi \
-            --dart-define=API_BASE_URL=https://cream.ambozygraphics.com/api
+            --dart-define=API_BASE_URL=${{ github.event.inputs.api_url || 'https://cream.ambozygraphics.com/api' }}
 
       - name: Upload release APK artifact
         uses: actions/upload-artifact@v4
