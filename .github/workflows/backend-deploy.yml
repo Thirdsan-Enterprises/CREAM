@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - 'backend/**'
+      # The browser version of the app is served from the same server.
+      - 'mobile/**'
   workflow_dispatch: {}
 
 permissions:
@@ -28,6 +30,23 @@ jobs:
 
       - name: Install PHP dependencies (production)
         run: composer install --no-dev --optimize-autoloader --prefer-dist --no-interaction
+
+      # The browser version (Mac, iPhone via Safari, any computer), served at
+      # /app on the same domain, so it talks to the API with no extra setup.
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build the browser version into public/app
+        working-directory: mobile
+        run: |
+          flutter pub get
+          flutter build web --release --base-href /app/ \
+            --dart-define=API_BASE_URL=/api
+          rm -rf ../backend/public/app
+          cp -r build/web ../backend/public/app
 
       - name: Package release
         run: |

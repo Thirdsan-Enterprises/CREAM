@@ -140,3 +140,28 @@ payment for that separately), if its plates are used up, or if its amount
 is used up. Packing for takeaway is always allowed. When the company sends
 its next LPO, open the account and tap **New LPO**; what was left on the
 account carries on.
+
+# The browser version (Mac, iPhone, any computer)
+
+The same app runs in a browser at **https://cream.ambozygraphics.com/app**
+(deployed with the server; same logins and data).
+
+- **iPhone:** open the link in Safari, then Share > *Add to Home Screen*.
+  It gets the Cream icon and opens full screen.
+- **Mac:** open it in Safari or Chrome. In Safari, File > *Add to Dock*.
+- Receipts and reports open as PDF to print or share. A browser cannot
+  reach a Bluetooth thermal printer: on a Mac, connect the printer by USB;
+  on an iPhone, use a Wi-Fi (AirPrint) printer or share the receipt.
+
+# Bluetooth receipt printer (Android app)
+
+1. Turn the printer on and pair it in the phone's Bluetooth settings
+   (PIN usually 0000 or 1234).
+2. After a sale, tap **Receipt** > *Choose Bluetooth printer*, pick the
+   paper width (80 or 58 mm) and the printer. Allow "Nearby devices" if the
+   phone asks.
+3. From then on, **Receipt** > *Print on (printer)* prints straight away.
+   *Share or print as PDF* is still there for WhatsApp or other printers.
+
+Printers: 80 mm thermal, ESC/POS, with USB + Bluetooth (and Wi-Fi/LAN if
+possible), so the same printer works from the Android app, a Mac and iPhones.
