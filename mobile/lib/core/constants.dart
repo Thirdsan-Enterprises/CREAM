@@ -9,8 +9,15 @@
 class AppConfig {
   AppConfig._();
 
-  static const apiBaseUrl = String.fromEnvironment(
+  static const _apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'http://10.0.2.2:8000/api',
   );
+
+  /// The API's full address. The browser version is built with "/api" and
+  /// served by the same server, so it is completed from the page's address
+  /// (https://cream.example.com/app/ -> https://cream.example.com/api).
+  static String get apiBaseUrl => _apiBaseUrl.startsWith('/')
+      ? Uri.base.resolve(_apiBaseUrl).toString()
+      : _apiBaseUrl;
 }

@@ -6,6 +6,8 @@ import '../../core/theme/app_colors.dart';
 import '../../shared/formatters/currency_formatter.dart';
 import '../../shared/pdf/cream_documents.dart';
 import '../../shared/pdf/share_pdf.dart';
+import '../../shared/printing/bt_printer.dart';
+import '../../shared/printing/printer_picker.dart';
 
 /// After a sale: the amount, the change to give, any account warning, and
 /// the receipt to print or send. One tap starts the next sale.
@@ -116,14 +118,16 @@ Future<void> showSaleComplete(
   );
 }
 
-/// Print or send (WhatsApp...) a sale's receipt.
+/// Print or send (WhatsApp...) a sale's receipt. On an Android phone the
+/// receipt goes straight to the Bluetooth thermal printer; elsewhere (and
+/// on request) it is a PDF to share or print.
 Future<void> offerReceipt(
   BuildContext context,
   WidgetRef ref,
   int saleId, {
   double? cashReceived,
-}) {
-  return offerPdf(
+}) async {
+  Future<void> asPdf() => offerPdf(
     context,
     title: 'Receipt #$saleId',
     filename: 'cream-receipt-$saleId.pdf',
@@ -134,4 +138,85 @@ Future<void> offerReceipt(
       return receiptPdf(receipt, cashReceived: cashReceived);
     },
   );
+
+  if (!BtPrinter.supported) return asPdf();
+
+  final printer = await BtPrinter.saved();
+  if (!context.mounted) return;
+  final choice = await showModalBottomSheet<String>(
+    context: context,
+    builder: (context) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.receipt_long),
+            title: Text(
+              'Receipt #$saleId',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          if (printer != null)
+            ListTile(
+              leading: const Icon(Icons.print, color: AppColors.success),
+              title: Text('Print on ${printer.name}'),
+              subtitle: Text('Bluetooth · ${printer.paperMm} mm paper'),
+              onTap: () => Navigator.pop(context, 'print'),
+            ),
+          ListTile(
+            leading: const Icon(Icons.bluetooth_searching),
+            title: Text(
+              printer == null ? 'Choose Bluetooth printer' : 'Change printer',
+            ),
+            onTap: () => Navigator.pop(context, 'choose'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.picture_as_pdf_outlined),
+            title: const Text('Share or print as PDF'),
+            subtitle: const Text('WhatsApp, email, other printers...'),
+            onTap: () => Navigator.pop(context, 'pdf'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (!context.mounted || choice == null) return;
+  switch (choice) {
+    case 'pdf':
+      return asPdf();
+    case 'choose':
+      final chosen = await choosePrinter(context);
+      if (chosen != null && context.mounted) {
+        await _printOn(context, ref, saleId, chosen, cashReceived);
+      }
+    case 'print':
+      await _printOn(context, ref, saleId, printer!, cashReceived);
+  }
+}
+
+Future<void> _printOn(
+  BuildContext context,
+  WidgetRef ref,
+  int saleId,
+  SavedPrinter printer,
+  double? cashReceived,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const Center(child: CircularProgressIndicator()),
+  );
+  String message;
+  try {
+    final receipt = await ref
+        .read(operationsRepositoryProvider)
+        .receipt(saleId);
+    await BtPrinter.printReceipt(printer, receipt, cashReceived: cashReceived);
+    message = 'Receipt printed on ${printer.name}.';
+  } catch (e) {
+    message = e is PrinterProblem ? e.message : 'Could not print: $e';
+  }
+  if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+  messenger.showSnackBar(SnackBar(content: Text(message)));
 }
